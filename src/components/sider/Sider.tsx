@@ -1,5 +1,5 @@
 import clsx from 'clsx'
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useTranslate } from '../../i18n/index.js'
 import { IconPanelLeftOutline16, IconSettingsOutline16, NewChatIcon } from '../base/icons.js'
 import { setSiderCollapsed } from '../../services/settings.js'
@@ -15,15 +15,40 @@ import { closeMobileSider, useMobileSider } from './mobileSiderState.js'
 import { SessionItem } from './SessionItem.js'
 import styles from './Sider.module.css'
 
+const HISTORY_PAGE_SIZE = 40
+
 /** 展开的侧边栏：名称与收起按钮、开启新对话、按时间分组的会话列表、底部设置；移动端放在抽屉里，收起按钮关闭抽屉 */
 export const Sider = ({ mobile = false }: { mobile?: boolean }) => {
   const t = useTranslate()
   const sessions = useChatStore((state) => state.sessions)
   const activeId = useChatStore((state) => state.activeId)
   const [now, setNow] = useState(Date.now)
-  const groups = useMemo(() => groupSessions(sessions, now, t), [sessions, now, t])
+  const [visibleCount, setVisibleCount] = useState(HISTORY_PAGE_SIZE)
+  const endRef = useRef<HTMLDivElement>(null)
+  const hasMore = visibleCount < sessions.length
+  const groups = useMemo(
+    () => groupSessions(sessions.slice(0, visibleCount), now, t),
+    [sessions, visibleCount, now, t]
+  )
   const [deleting, setDeleting] = useState<SessionSummary | null>(null)
   const [deletePending, setDeletePending] = useState(false)
+
+  useEffect(() => {
+    const end = endRef.current
+    if (!end) {
+      return
+    }
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        if (entry.isIntersecting) {
+          setVisibleCount(visibleCount + HISTORY_PAGE_SIZE)
+        }
+      },
+      { root: end.parentElement, rootMargin: '0px 0px 160px' }
+    )
+    observer.observe(end)
+    return () => observer.disconnect()
+  }, [hasMore, visibleCount])
 
   useEffect(() => {
     let timer: ReturnType<typeof setTimeout>
@@ -89,6 +114,7 @@ export const Sider = ({ mobile = false }: { mobile?: boolean }) => {
               ))}
             </div>
           ))}
+          {hasMore && <div ref={endRef} aria-hidden="true" />}
         </div>
       </div>
       <div className={styles.bottom}>
