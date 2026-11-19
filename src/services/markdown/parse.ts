@@ -85,3 +85,42 @@ export function toMdAst(
   simplify(ast)
   return ast
 }
+
+const blankLine = /^\r?\n[ \t]*\r?\n/
+
+/** 流式回复中只复用已被空行分隔的普通段落和标题。定义、列表等保留在完整解析的尾部。 */
+export function createStreamingParser(options: Parameters<typeof toMdAst>[1]) {
+  let prefix = ''
+  let blocks: Root['children'] = []
+
+  return (input: string): Root['children'] => {
+    if (prefix && (!input.startsWith(prefix) || !blankLine.test(input.slice(prefix.length)))) {
+      prefix = ''
+      blocks = []
+    }
+    const tail = input.slice(prefix.length)
+    const { children } = toMdAst(tail, options)
+    const result = blocks.concat(children)
+
+    let committedEnd = 0
+    for (const node of children) {
+      const end = node.position?.end.offset
+      if (
+        (node.type !== 'paragraph' && node.type !== 'heading') ||
+        end === undefined ||
+        !blankLine.test(tail.slice(end))
+      ) {
+        break
+      }
+      const start = node.position?.start.offset ?? 0
+      // 引用定义可影响前文，未闭合的公式、代码和 HTML 也可能跨越空行。
+      if (/[`$<[\\]/.test(tail.slice(start, end))) {
+        break
+      }
+      blocks.push(node)
+      committedEnd = end
+    }
+    prefix += tail.slice(0, committedEnd)
+    return result
+  }
+}

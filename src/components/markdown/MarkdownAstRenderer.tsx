@@ -213,12 +213,12 @@ const MarkdownBlockContentOrDefinitionContent = memo(
 )
 
 export const MarkdownAstRenderer = memo(function MarkdownAstRenderer({
-  ast,
+  nodes,
   onUpdate,
   className,
   loading = false,
 }: {
-  ast: Root
+  nodes: Root['children']
   className?: string
   loading?: boolean
   /**
@@ -230,18 +230,18 @@ export const MarkdownAstRenderer = memo(function MarkdownAstRenderer({
   onUpdateRef.current = onUpdate
   useLayoutEffect(() => {
     onUpdateRef.current()
-  }, [ast.children])
+  }, [nodes])
 
   return useMemo(
     () => (
       <div className={clsx('ds-markdown', className)}>
         {/* 解析器在根节点下产出块级内容。 */}
         <MarkdownBlockContentOrDefinitionContent
-          nodes={ast.children as Array<BlockContent | DefinitionContent>}
+          nodes={nodes as Array<BlockContent | DefinitionContent>}
           loading={loading}
         />
       </div>
     ),
-    [className, ast.children, loading]
+    [className, nodes, loading]
   )
 })
