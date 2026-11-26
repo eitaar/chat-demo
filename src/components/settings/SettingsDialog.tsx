@@ -21,6 +21,8 @@ import { useChatStore } from '../../services/chat/store.js'
 import { regionCodes, getRegionName, provinces } from '../../services/location.js'
 import {
   isChineseBrowser,
+  parseChatCompletionsSettings,
+  setChatCompletions,
   setLocale,
   setLocation,
   setThemePreference,
@@ -63,6 +65,7 @@ const SettingsContent = ({
 }) => {
   const t = useTranslate()
   const isMobile = useIsMobile()
+  const chatCompletions = useSettings((state) => state.chatCompletions)
   // 打开时按调用方指定的分组选中，之后在弹窗内切换
   const [section, setSection] = useState(() => useSettingsDialog.getState().section)
   // 切换分组不丢失正在输入的 API Key
@@ -109,7 +112,8 @@ const SettingsContent = ({
             </>
           ) : (
             <>
-              <ApiKeyField editor={apiKeyEditor} />
+              <ChatCompletionsSetting />
+              {chatCompletions ? null : <ApiKeyField editor={apiKeyEditor} />}
               <ImportHistory historyImport={historyImport} disabled={historyBusy} />
               <ExportHistory disabled={historyBusy} />
               <SettingCell
@@ -127,7 +131,7 @@ const SettingsContent = ({
                   </Button>
                 }
               />
-              {isMobile ? <ApiKeyConfirm editor={apiKeyEditor} /> : null}
+              {isMobile && !chatCompletions ? <ApiKeyConfirm editor={apiKeyEditor} /> : null}
             </>
           )}
         </div>
@@ -135,6 +139,70 @@ const SettingsContent = ({
       {historyImport.file ? <ImportConfirm historyImport={historyImport} /> : null}
       {historyDelete.opened ? <DeleteAllConfirm historyDelete={historyDelete} /> : null}
     </>
+  )
+}
+
+const ChatCompletionsSetting = () => {
+  const t = useTranslate()
+  const config = useSettings((state) => state.chatCompletions)
+  const [endpoint, setEndpoint] = useState(config?.endpoint ?? '')
+  const [model, setModel] = useState(config?.model ?? '')
+  const [invalid, setInvalid] = useState(false)
+
+  return (
+    <form
+      className={clsx(styles.cell, styles.apiKey)}
+      onSubmit={(event) => {
+        event.preventDefault()
+        const next = parseChatCompletionsSettings(endpoint, model)
+        if (endpoint.trim() && !next) {
+          setInvalid(true)
+          return
+        }
+        setInvalid(false)
+        setEndpoint(next?.endpoint ?? '')
+        setModel(next?.model ?? '')
+        setChatCompletions(next)
+      }}
+    >
+      <label>
+        <span className={styles.label}>{t('chatCompletionsUrl')}</span>
+        <span className={styles.apiKeyInput}>
+          <input
+            placeholder="/v1/chat/completions"
+            value={endpoint}
+            onChange={(event) => setEndpoint(event.target.value)}
+            autoCapitalize="none"
+            spellCheck={false}
+          />
+        </span>
+      </label>
+      <label>
+        <span className={styles.label}>{t('chatCompletionsModel')}</span>
+        <span className={styles.apiKeyInput}>
+          <input
+            value={model}
+            onChange={(event) => setModel(event.target.value)}
+            autoCapitalize="none"
+            spellCheck={false}
+          />
+        </span>
+      </label>
+      <div className={styles.description}>{t('chatCompletionsDescription')}</div>
+      {invalid ? (
+        <div role="alert" className={styles.error}>
+          {t('chatCompletionsInvalid')}
+        </div>
+      ) : null}
+      <Button
+        type="submit"
+        variant="outlined"
+        size="m"
+        disabled={endpoint === (config?.endpoint ?? '') && model === (config?.model ?? '')}
+      >
+        {t('chatCompletionsApply')}
+      </Button>
+    </form>
   )
 }
 

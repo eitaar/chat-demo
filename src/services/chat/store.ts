@@ -1,7 +1,7 @@
 import { create } from 'zustand'
 import { getAbortReason, throwIfAborted } from '../../utils/abort.js'
 import { createId } from '../../utils/id.js'
-import { ApiError, streamMessage } from '../api/client.js'
+import { ApiError, streamChatCompletions, streamMessage } from '../api/client.js'
 import type { ChatModel, CreateMessageRequest } from '../api/types.js'
 import { extractFileIds, getFileErrorCode, isRetryableApiError } from '../api/errors.js'
 import {
@@ -27,6 +27,7 @@ import {
   canContinueReply,
   getContextRounds,
   settleReply,
+  toChatCompletionMessages,
   toRequestMessages,
 } from './reply.js'
 import {
@@ -262,15 +263,14 @@ export const bindChatPersistence = () => {
 
 /** 按当前开关创建回复：深度思考对应 thinking，智能搜索控制 deepseek_web_search。 */
 const createReply = (): AssistantMessage => {
-  const { thinking, search } = useSettings.getState()
+  const { chatCompletions, thinking, search } = useSettings.getState()
   return {
     id: createId(),
     role: 'assistant',
     createdAt: Date.now(),
-    model: MODEL,
-    thinking,
-    search,
-    prefix: true,
+    model: chatCompletions ? null : MODEL,
+    ...(chatCompletions ? { chatCompletions: true } : { thinking, search }),
+    prefix: !chatCompletions,
     status: 'pending',
     blocks: [],
   }
@@ -557,7 +557,8 @@ export const sendMessage = (targetSessionId: string | null) => {
     return false
   }
   const prepared = prepareDraftMessage(getDraft(targetSessionId), useUploads.getState().tasks)
-  if (!prepared) {
+  const { chatCompletions } = useSettings.getState()
+  if (!prepared || (chatCompletions && prepared.files.length > 0)) {
     return false
   }
   const { text, files } = prepared
@@ -572,7 +573,7 @@ export const sendMessage = (targetSessionId: string | null) => {
   if (sessionId === null) {
     const session: Session = {
       id: createId(),
-      title: '',
+      title: chatCompletions ? text.replace(/\s+/g, ' ').slice(0, 60) : '',
       createdAt: now,
       updatedAt: now,
       messages: [],
@@ -696,7 +697,11 @@ export const selectMessageVersion = (sessionId: string, messageId: string) => {
 
 /** 继续最后一条未完成的回答：保留原消息与开关，仅将新流的内容追加到原块之后。 */
 export const continueReply = (sessionId: string, messageId: string) => {
-  if (get().importingHistory || deletingSessions.has(sessionId)) {
+  if (
+    get().importingHistory ||
+    deletingSessions.has(sessionId) ||
+    useSettings.getState().chatCompletions
+  ) {
     return
   }
   const session = getSession(sessionId)
@@ -734,7 +739,11 @@ export const continueReply = (sessionId: string, messageId: string) => {
 
 /** 附件补传失败后重试：保留原回答位置，重新补传并请求 */
 export const retryUpload = (sessionId: string, messageId: string) => {
-  if (get().importingHistory || deletingSessions.has(sessionId)) {
+  if (
+    get().importingHistory ||
+    deletingSessions.has(sessionId) ||
+    useSettings.getState().chatCompletions
+  ) {
     return
   }
   const session = getSession(sessionId)
@@ -986,7 +995,8 @@ const waitForRetry = (attempt: number, signal: AbortSignal) =>
  */
 const streamReply = async (sessionId: string, initial: AssistantMessage, request: Request) => {
   const controller = new AbortController()
-  if (!getSession(sessionId)?.title) {
+  const { chatCompletions } = useSettings.getState()
+  if (!chatCompletions && !getSession(sessionId)?.title) {
     titleRequests.add(controller)
   }
   set((state) => ({ streaming: { ...state.streaming, [sessionId]: controller } }))
@@ -1002,38 +1012,50 @@ const streamReply = async (sessionId: string, initial: AssistantMessage, request
   try {
     for (let attempt = 0; ; attempt += 1) {
       /** 附件补齐前出错属于上传失败，请求还没有发出 */
-      let preparing = true
+      let preparing = !chatCompletions
       let receivedContent = false
       try {
-        const prepared = await prepareFiles(sessionId, request, controller.signal)
-        preparing = false
-        // 附件就绪后获取本轮信息；续写沿用原回答快照，重新生成的快照独立保存。
-        const latestReminder = prepared.prefix
-          ? prepared.prefix.latestReminder
-          : createLatestReminder(useSettings.getState())
-        reply = { ...reply, latestReminder }
-        updateReply(sessionId, reply)
-        persist(sessionId)
-        const messages = toRequestMessages(
-          prepared.history,
-          prepared.question,
-          prepared.prefix,
-          initial.thinking ?? false,
-          latestReminder
-        )
-        const events = streamMessage(
-          useSettings.getState().apiKey ?? '',
-          {
-            model: initial.model ?? MODEL,
-            system: SYSTEM_PROMPT,
-            messages,
-            thinking: { type: initial.thinking ? 'enabled' : 'disabled' },
-            safety_check: SAFETY_CHECK,
-            tools: serverTools(initial.search ?? false),
-            ...(titleRequests.has(controller) ? { title: { enabled: true } } : {}),
-          },
-          controller.signal
-        )
+        let events
+        if (chatCompletions) {
+          if (!request.question.content.trim() || request.question.files.length > 0) {
+            throw new ApiError('protocol', { key: 'chatCompletionsTextOnly' })
+          }
+          events = streamChatCompletions(
+            chatCompletions.endpoint,
+            chatCompletions.model,
+            toChatCompletionMessages(request.history, request.question),
+            controller.signal
+          )
+        } else {
+          const prepared = await prepareFiles(sessionId, request, controller.signal)
+          preparing = false
+          // 续写沿用原回答的系统信息快照，重新生成时独立保存。
+          const latestReminder = prepared.prefix
+            ? prepared.prefix.latestReminder
+            : createLatestReminder(useSettings.getState())
+          reply = { ...reply, latestReminder }
+          updateReply(sessionId, reply)
+          persist(sessionId)
+          events = streamMessage(
+            useSettings.getState().apiKey ?? '',
+            {
+              model: initial.model ?? MODEL,
+              system: SYSTEM_PROMPT,
+              messages: toRequestMessages(
+                prepared.history,
+                prepared.question,
+                prepared.prefix,
+                initial.thinking ?? false,
+                latestReminder
+              ),
+              thinking: { type: initial.thinking ? 'enabled' : 'disabled' },
+              safety_check: SAFETY_CHECK,
+              tools: serverTools(initial.search ?? false),
+              ...(titleRequests.has(controller) ? { title: { enabled: true } } : {}),
+            },
+            controller.signal
+          )
+        }
         const blockIndexes = new Map<number, number>()
         for await (const event of events) {
           receivedContent ||= event.type === 'content_block_start'
@@ -1074,6 +1096,7 @@ const streamReply = async (sessionId: string, initial: AssistantMessage, request
         }
         // 附件失效：重新补传后重发。收到过内容块（含丢弃的客户端工具）后不自动重发。
         if (
+          !chatCompletions &&
           attempt < FILE_RETRY_LIMIT &&
           !receivedContent &&
           reuploadInvalidatedFiles(sessionId, request, error)

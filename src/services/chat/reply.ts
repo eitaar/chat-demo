@@ -1,3 +1,4 @@
+import type { ChatCompletionMessage } from '../api/client.js'
 import type {
   AssistantBlockParam,
   FileBlockParam,
@@ -294,6 +295,23 @@ export const getContextRounds = (history: Message[]): [UserMessage, AssistantMes
     }
   }
   return rounds
+}
+
+export const toChatCompletionMessages = (
+  history: Message[],
+  question: UserMessage
+): ChatCompletionMessage[] => {
+  const messages: ChatCompletionMessage[] = []
+  for (const [user, reply] of getContextRounds(history)) {
+    if (user.content.trim()) {
+      messages.push(
+        { role: 'user', content: user.content },
+        { role: 'assistant', content: getReplyText(reply) }
+      )
+    }
+  }
+  messages.push({ role: 'user', content: question.content })
+  return messages
 }
 
 /**

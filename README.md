@@ -27,6 +27,12 @@ pnpm build
 
 The output is written to `dist/`. Deploy it to a static web server or open `dist/index.html` directly. Opening the file directly requires browser support for storage on `file://` pages and an API service that permits their cross-origin requests.
 
+## Chat Completions
+
+To use a Chat Completions-compatible endpoint, open **Settings → Data**, enter the full Chat Completions URL (for example, `/v1/chat/completions` on the same site) and a model ID, then click **Apply**. Clear the URL and apply to switch back to DeepSeek.
+
+Chat Completions mode sends text conversation history and streams replies. If the endpoint requires an API key, use a proxy that supplies the key on the server. For an endpoint on another origin, allow requests from the app's origin.
+
 ## Features
 
 - Multiple conversations with automatic titles, renaming, and deletion; edit prompts, regenerate replies, and switch between message branches.

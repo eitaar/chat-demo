@@ -18,7 +18,7 @@ export const DraftAttachments = memo(function DraftAttachments({
   onRemove,
 }: {
   items: DraftAttachment[]
-  onRetry: (id: string) => void
+  onRetry?: (id: string) => void
   onRemove: (id: string) => void
 }) {
   if (items.length === 0) {
@@ -30,7 +30,7 @@ export const DraftAttachments = memo(function DraftAttachments({
         <AttachmentItem
           key={item.id}
           item={item}
-          onRetry={() => onRetry(item.id)}
+          onRetry={onRetry ? () => onRetry(item.id) : undefined}
           onRemove={() => onRemove(item.id)}
         />
       ))}
@@ -45,7 +45,7 @@ const AttachmentItem = ({
   onRemove,
 }: {
   item: DraftAttachment
-  onRetry: () => void
+  onRetry?: () => void
   onRemove: () => void
 }) => {
   const t = useTranslate()

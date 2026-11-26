@@ -8,6 +8,7 @@ import type {
   FileObject,
   FilePurpose,
   MessageStreamEvent,
+  StopReason,
 } from './types.js'
 
 /** 构建期 API 地址，默认 https://api.deepseek.com；本地开发支持开发服务器代理 */
@@ -187,4 +188,79 @@ export async function* streamMessage(
   }
   // 服务端没有提供错误内容时保持为空，不推测断流原因。
   throw new ApiError('interrupted', '')
+}
+
+export type ChatCompletionMessage = { role: 'user' | 'assistant'; content: string }
+
+const completionStopReason = (reason: string): StopReason => {
+  switch (reason) {
+    case 'length':
+      return 'max_tokens'
+    case 'content_filter':
+      return 'refusal'
+    case 'tool_calls':
+    case 'function_call':
+      return 'tool_use'
+    default:
+      return 'end_turn'
+  }
+}
+
+/** Adapt text chunks from Chat Completions to the shared reply events. */
+export async function* streamChatCompletions(
+  endpoint: string,
+  model: string,
+  messages: ChatCompletionMessage[],
+  signal: AbortSignal
+): AsyncGenerator<MessageStreamEvent> {
+  const response = await request(endpoint, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Accept: 'text/event-stream' },
+    body: JSON.stringify({ model, messages, stream: true }),
+    signal,
+  })
+  const contentType = response.headers.get('Content-Type') ?? ''
+  if (!response.body || !contentType.includes('text/event-stream')) {
+    throw await readErrorResponse(response, 'protocol', 'Expected a text/event-stream response')
+  }
+
+  let started = false
+  for await (const { event, data } of readServerSentEvents(response.body, signal)) {
+    if (data === '[DONE]') {
+      yield { type: 'message_stop' }
+      return
+    }
+    let chunk: {
+      choices?: {
+        delta?: { content?: string | null }
+        finish_reason?: string | null
+      }[]
+    } | null
+    try {
+      chunk = JSON.parse(data)
+    } catch {
+      throw new ApiError(event === 'error' ? 'stream' : 'protocol', data)
+    }
+    if (isErrorBody(chunk) || event === 'error') {
+      throw new ApiError('stream', isErrorBody(chunk) ? chunk.error.message : data)
+    }
+
+    const choice = chunk?.choices?.[0]
+    const text = choice?.delta?.content
+    if (typeof text === 'string' && text) {
+      if (!started) {
+        started = true
+        yield { type: 'content_block_start', index: 0, content_block: { type: 'text', text } }
+      } else {
+        yield { type: 'content_block_delta', index: 0, delta: { type: 'text_delta', text } }
+      }
+    }
+    if (typeof choice?.finish_reason === 'string') {
+      yield {
+        type: 'message_delta',
+        delta: { stop_reason: completionStopReason(choice.finish_reason), stop_sequence: null },
+      }
+    }
+  }
+  throw new ApiError('interrupted', { key: 'chatCompletionsInterrupted' })
 }

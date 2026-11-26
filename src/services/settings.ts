@@ -7,9 +7,12 @@ export type Locale = 'zh-CN' | 'en-US'
 /** 主题偏好；默认跟随系统 */
 export type ThemePreference = 'light' | 'dark' | 'system'
 
+export type ChatCompletionsSettings = { endpoint: string; model: string }
+
 /** 本机设置，存 localStorage：API Key、语言、主题、位置、朗读音色、深度思考与智能搜索开关、侧边栏收起状态 */
 type Settings = {
   apiKey: string | null
+  chatCompletions: ChatCompletionsSettings | null
   locale: Locale
   themePreference: ThemePreference
   location: UserLocation | null
@@ -21,6 +24,7 @@ type Settings = {
 
 const KEYS = {
   apiKey: 'chat-demo:api-key',
+  chatCompletions: 'chat-demo:chat-completions',
   locale: 'chat-demo:locale',
   location: 'chat-demo:location',
   themePreference: 'chat-demo:theme-preference',
@@ -87,8 +91,37 @@ const initialThemePreference = (): ThemePreference => {
 /** 未保存过时使用服务端默认音色 stella（海星） */
 const initialTtsVoice = (): TtsVoice => (read(KEYS.ttsVoice) === 'tide' ? 'tide' : 'stella')
 
+export const parseChatCompletionsSettings = (
+  endpoint: string,
+  model: string
+): ChatCompletionsSettings | null => {
+  endpoint = endpoint.trim()
+  model = model.trim()
+  if (!model || !/^(\/[^/]|https?:\/\/)/i.test(endpoint) || /[\t\r\n\\]/.test(endpoint)) {
+    return null
+  }
+  try {
+    const url = new URL(endpoint, 'https://localhost')
+    return url.username || url.password || url.hash ? null : { endpoint, model }
+  } catch {
+    return null
+  }
+}
+
+const initialChatCompletions = (): ChatCompletionsSettings | null => {
+  try {
+    const saved = JSON.parse(read(KEYS.chatCompletions) ?? 'null')
+    return typeof saved?.endpoint === 'string' && typeof saved.model === 'string'
+      ? parseChatCompletionsSettings(saved.endpoint, saved.model)
+      : null
+  } catch {
+    return null
+  }
+}
+
 export const useSettings = create<Settings>(() => ({
   apiKey: read(KEYS.apiKey),
+  chatCompletions: initialChatCompletions(),
   locale: initialLocale(),
   location: initialLocation(),
   themePreference: initialThemePreference(),
@@ -122,6 +155,11 @@ export const setTtsVoice = (ttsVoice: TtsVoice) => {
 export const setApiKey = (apiKey: string | null) => {
   write(KEYS.apiKey, apiKey)
   useSettings.setState({ apiKey })
+}
+
+export const setChatCompletions = (chatCompletions: ChatCompletionsSettings | null) => {
+  write(KEYS.chatCompletions, chatCompletions ? JSON.stringify(chatCompletions) : null)
+  useSettings.setState({ chatCompletions })
 }
 
 export const setThinking = (thinking: boolean) => {

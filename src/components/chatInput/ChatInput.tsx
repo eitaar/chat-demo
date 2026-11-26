@@ -24,7 +24,7 @@ import { stopReadAloud } from '../../services/speech/readAloud.js'
 import { IconButton } from '../base/IconButton.js'
 import { Tooltip } from '../base/Tooltip.js'
 import { preloadMarkdown } from '../markdown/Markdown.js'
-import { ensureApiKey } from '../settings/settingsDialogState.js'
+import { ensureApiKey, ensureChatConnection } from '../settings/settingsDialogState.js'
 import { DragMask, useFileDrop } from './DragMask.js'
 import { showToast } from '../base/toastState.js'
 import { ACCEPT, useUploads } from '../../services/attachments.js'
@@ -51,6 +51,7 @@ const Input = ({ sessionId }: { sessionId: string | null }) => {
     (state) => sessionId !== null && Object.hasOwn(state.streaming, sessionId)
   )
   const thinking = useSettings((state) => state.thinking)
+  const chatCompletions = useSettings((state) => !!state.chatCompletions)
   const importingHistory = useChatStore((state) => state.importingHistory)
   const isMobile = useIsMobile()
   const search = useSettings((state) => state.search)
@@ -73,9 +74,13 @@ const Input = ({ sessionId }: { sessionId: string | null }) => {
     const observer = new ResizeObserver(updateLabels)
     observer.observe(toggles)
     return () => observer.disconnect()
-  }, [t])
+  }, [t, chatCompletions])
 
   const acceptFiles = (files: File[]) => {
+    if (files.length > 0 && useSettings.getState().chatCompletions) {
+      showToast({ key: 'chatCompletionsTextOnly' })
+      return
+    }
     if (files.length === 0 || useChatStore.getState().importingHistory || !ensureApiKey()) {
       return
     }
@@ -115,8 +120,13 @@ const Input = ({ sessionId }: { sessionId: string | null }) => {
     })
   })
 
-  // 欢迎页导入后会话 ID 不变，不能依赖卸载取消语音；订阅开始事件也覆盖快速完成的导入。
   const cancelVoice = voice.cancel
+  useEffect(() => {
+    if (chatCompletions) {
+      cancelVoice()
+    }
+  }, [chatCompletions, cancelVoice])
+  // 欢迎页导入后会话 ID 不变，不能依赖卸载取消语音；订阅开始事件也覆盖快速完成的导入。
   useEffect(
     () =>
       useChatStore.subscribe((state, previous) => {
@@ -131,18 +141,28 @@ const Input = ({ sessionId }: { sessionId: string | null }) => {
   const recording = voice.status === 'recording'
 
   // 排队、上传中或上传失败的附件都留在输入框，全部上传成功后才能发送
-  const canSend = !importingHistory && !streaming && voice.status === 'idle' && draftReady
+  const canSend =
+    !importingHistory &&
+    !streaming &&
+    voice.status === 'idle' &&
+    draftReady &&
+    (!chatCompletions || attachments.length === 0)
 
   const send = () => {
+    const currentDraft = getDraft(sessionId)
+    if (useSettings.getState().chatCompletions && currentDraft.attachments.length > 0) {
+      showToast({ key: 'chatCompletionsTextOnly' })
+      return
+    }
     if (
       useChatStore.getState().importingHistory ||
       voice.status !== 'idle' ||
-      !prepareDraftMessage(getDraft(sessionId), useUploads.getState().tasks)
+      !prepareDraftMessage(currentDraft, useUploads.getState().tasks)
     ) {
       return
     }
     // 文本与上传完成态由提交动作读取最新快照，不使用上一次渲染的草稿。
-    if (!ensureApiKey() || !sendMessage(sessionId)) {
+    if (!ensureChatConnection() || !sendMessage(sessionId)) {
       return
     }
     preloadMarkdown()
@@ -163,7 +183,11 @@ const Input = ({ sessionId }: { sessionId: string | null }) => {
         }
       }}
     >
-      <DraftAttachments items={attachments} onRetry={retryFile} onRemove={removeFile} />
+      <DraftAttachments
+        items={attachments}
+        onRetry={chatCompletions ? undefined : retryFile}
+        onRemove={removeFile}
+      />
       <div className={styles.textareaWrapper}>
         <textarea
           ref={textareaRef}
@@ -204,64 +228,72 @@ const Input = ({ sessionId }: { sessionId: string | null }) => {
       <div className={styles.functionRow}>
         {/* 深度思考 / 智能搜索开关，tooltip 在按钮上方 */}
         <div ref={togglesRef} className={styles.toggles}>
-          <Tooltip content={t('deactivatedThinkTooltip')}>
-            <button
-              type="button"
-              className={clsx(styles.toggle, thinking && styles.selected)}
-              aria-label={t('thinkingSwitch')}
-              aria-pressed={thinking}
-              onClick={() => setThinking(!thinking)}
-            >
-              <IconThinkOutline14 />
-              <span className={styles.toggleLabel}>{t('thinkingSwitch')}</span>
-            </button>
-          </Tooltip>
-          <Tooltip content={t('deactivatedSearchTooltip')}>
-            <button
-              type="button"
-              className={clsx(styles.toggle, search && styles.selected)}
-              aria-label={t('search')}
-              aria-pressed={search}
-              onClick={() => setSearch(!search)}
-            >
-              <IconGlobeLanguageOutline14 />
-              <span className={styles.toggleLabel}>{t('search')}</span>
-            </button>
-          </Tooltip>
+          {chatCompletions ? null : (
+            <>
+              <Tooltip content={t('deactivatedThinkTooltip')}>
+                <button
+                  type="button"
+                  className={clsx(styles.toggle, thinking && styles.selected)}
+                  aria-label={t('thinkingSwitch')}
+                  aria-pressed={thinking}
+                  onClick={() => setThinking(!thinking)}
+                >
+                  <IconThinkOutline14 />
+                  <span className={styles.toggleLabel}>{t('thinkingSwitch')}</span>
+                </button>
+              </Tooltip>
+              <Tooltip content={t('deactivatedSearchTooltip')}>
+                <button
+                  type="button"
+                  className={clsx(styles.toggle, search && styles.selected)}
+                  aria-label={t('search')}
+                  aria-pressed={search}
+                  onClick={() => setSearch(!search)}
+                >
+                  <IconGlobeLanguageOutline14 />
+                  <span className={styles.toggleLabel}>{t('search')}</span>
+                </button>
+              </Tooltip>
+            </>
+          )}
         </div>
         <div className={styles.right}>
-          <VoiceButton
-            status={voice.status}
-            disabled={!voice.available}
-            seconds={voice.seconds}
-            onClick={() => {
-              if (
-                voice.status !== 'idle' ||
-                (!useChatStore.getState().importingHistory && ensureApiKey())
-              ) {
-                void voice.toggle()
-              }
-            }}
-          />
-          <IconButton
-            size="m"
-            tone="primary"
-            icon={<IconPaperclipOutline16 />}
-            tooltip={t('uploadFile')}
-            disabled={importingHistory}
-            onClick={() => ensureApiKey() && fileInputRef.current?.click()}
-          />
-          <input
-            ref={fileInputRef}
-            type="file"
-            multiple
-            hidden
-            accept={ACCEPT}
-            onChange={(event) => {
-              acceptFiles(Array.from(event.target.files ?? []))
-              event.target.value = ''
-            }}
-          />
+          {chatCompletions ? null : (
+            <>
+              <VoiceButton
+                status={voice.status}
+                disabled={!voice.available}
+                seconds={voice.seconds}
+                onClick={() => {
+                  if (
+                    voice.status !== 'idle' ||
+                    (!useChatStore.getState().importingHistory && ensureApiKey())
+                  ) {
+                    void voice.toggle()
+                  }
+                }}
+              />
+              <IconButton
+                size="m"
+                tone="primary"
+                icon={<IconPaperclipOutline16 />}
+                tooltip={t('uploadFile')}
+                disabled={importingHistory}
+                onClick={() => ensureApiKey() && fileInputRef.current?.click()}
+              />
+              <input
+                ref={fileInputRef}
+                type="file"
+                multiple
+                hidden
+                accept={ACCEPT}
+                onChange={(event) => {
+                  acceptFiles(Array.from(event.target.files ?? []))
+                  event.target.value = ''
+                }}
+              />
+            </>
+          )}
           {streaming && sessionId ? (
             <button
               type="button"
@@ -287,7 +319,7 @@ const Input = ({ sessionId }: { sessionId: string | null }) => {
           )}
         </div>
       </div>
-      {dragging ? <DragMask /> : null}
+      {dragging && !chatCompletions ? <DragMask /> : null}
     </div>
   )
 }
