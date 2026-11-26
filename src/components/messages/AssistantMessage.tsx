@@ -6,6 +6,7 @@ import { describeReply } from '../../services/chat/describe.js'
 import { canContinueReply } from '../../services/chat/reply.js'
 import { continueReply, regenerateReply } from '../../services/chat/store.js'
 import { stopReadAloud } from '../../services/speech/readAloud.js'
+import { useSettings } from '../../services/settings.js'
 import type { AssistantMessage as AssistantMessageType } from '../../services/chat/types.js'
 import { openSettings } from '../settings/settingsDialogState.js'
 import { IconButton } from '../base/IconButton.js'
@@ -44,6 +45,7 @@ export const AssistantMessage = memo(function AssistantMessage({
   onSelectVersion: SelectMessageVersion
 }) {
   const t = useTranslate()
+  const chatCompletions = useSettings((state) => !!state.chatCompletions)
   const view = useReplyView(message, streaming)
   const panelEntry = useSearchPanel((state) => state.entry)
   const notice = streaming ? null : describeReply(message)
@@ -143,7 +145,7 @@ export const AssistantMessage = memo(function AssistantMessage({
           <BranchSwitcher versions={versions} disabled={busy} onSelect={onSelectVersion} />
           <div className={clsx(styles.actions, isLast && styles.alwaysShow)}>
             {copyText ? <CopyButton text={copyText} /> : null}
-            {responseText && !refused ? (
+            {responseText && !refused && !chatCompletions ? (
               <ReadAloudButton messageId={message.id} text={responseText} />
             ) : null}
             <IconButton
@@ -157,7 +159,7 @@ export const AssistantMessage = memo(function AssistantMessage({
               }}
             />
           </div>
-          {isLast && canContinueReply(message) ? (
+          {isLast && !chatCompletions && canContinueReply(message) ? (
             <Button
               variant="outlined"
               size="s"

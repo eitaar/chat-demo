@@ -1,9 +1,10 @@
 import { create } from 'zustand'
 import { getAbortReason, throwIfAborted } from '../../utils/abort.js'
 import { createId } from '../../utils/id.js'
-import { ApiError, streamMessage } from '../api/client.js'
+import { ApiError, streamChatCompletions, streamMessage } from '../api/client.js'
 import type { ChatModel, CreateMessageRequest } from '../api/types.js'
 import { extractFileIds, getFileErrorCode, isRetryableApiError } from '../api/errors.js'
+import { searchExa } from '../api/exa.js'
 import {
   cancelUpload,
   checkImageFileIds,
@@ -27,6 +28,7 @@ import {
   canContinueReply,
   getContextRounds,
   settleReply,
+  toChatCompletionMessages,
   toRequestMessages,
 } from './reply.js'
 import {
@@ -262,15 +264,14 @@ export const bindChatPersistence = () => {
 
 /** 按当前开关创建回复：深度思考对应 thinking，智能搜索控制 deepseek_web_search。 */
 const createReply = (): AssistantMessage => {
-  const { thinking, search } = useSettings.getState()
+  const { chatCompletions, thinking, search } = useSettings.getState()
   return {
     id: createId(),
     role: 'assistant',
     createdAt: Date.now(),
-    model: MODEL,
-    thinking,
-    search,
-    prefix: true,
+    model: chatCompletions ? null : MODEL,
+    ...(chatCompletions ? { chatCompletions: true } : { thinking, search }),
+    prefix: !chatCompletions,
     status: 'pending',
     blocks: [],
   }
@@ -556,7 +557,12 @@ export const sendMessage = (targetSessionId: string | null) => {
   if (get().importingHistory || !get().ready) {
     return false
   }
-  const prepared = prepareDraftMessage(getDraft(targetSessionId), useUploads.getState().tasks)
+  const { chatCompletions } = useSettings.getState()
+  const prepared = prepareDraftMessage(
+    getDraft(targetSessionId),
+    useUploads.getState().tasks,
+    !!chatCompletions
+  )
   if (!prepared) {
     return false
   }
@@ -572,7 +578,9 @@ export const sendMessage = (targetSessionId: string | null) => {
   if (sessionId === null) {
     const session: Session = {
       id: createId(),
-      title: '',
+      title: chatCompletions
+        ? (text || files[0]?.name || '').replace(/\s+/g, ' ').slice(0, 60)
+        : '',
       createdAt: now,
       updatedAt: now,
       messages: [],
@@ -599,7 +607,7 @@ export const sendMessage = (targetSessionId: string | null) => {
       id,
       serverId,
       // 草稿附件已上传成功，每张图片都在上传前检查过长边，超限的已缩小。
-      imageSizeChecked: isImage,
+      imageSizeChecked: isImage && serverId !== null,
       name,
       size,
       isImage,
@@ -619,6 +627,9 @@ export const sendMessage = (targetSessionId: string | null) => {
     ])
   }
   persist(sessionId)
+  if (chatCompletions) {
+    files.filter((file) => !file.serverId).forEach((file) => cancelUpload(file.id))
+  }
   clearSentDraft(targetSessionId)
   void streamReply(sessionId, reply, { history, question })
   return true
@@ -696,7 +707,11 @@ export const selectMessageVersion = (sessionId: string, messageId: string) => {
 
 /** 继续最后一条未完成的回答：保留原消息与开关，仅将新流的内容追加到原块之后。 */
 export const continueReply = (sessionId: string, messageId: string) => {
-  if (get().importingHistory || deletingSessions.has(sessionId)) {
+  if (
+    get().importingHistory ||
+    deletingSessions.has(sessionId) ||
+    useSettings.getState().chatCompletions
+  ) {
     return
   }
   const session = getSession(sessionId)
@@ -734,7 +749,11 @@ export const continueReply = (sessionId: string, messageId: string) => {
 
 /** 附件补传失败后重试：保留原回答位置，重新补传并请求 */
 export const retryUpload = (sessionId: string, messageId: string) => {
-  if (get().importingHistory || deletingSessions.has(sessionId)) {
+  if (
+    get().importingHistory ||
+    deletingSessions.has(sessionId) ||
+    useSettings.getState().chatCompletions
+  ) {
     return
   }
   const session = getSession(sessionId)
@@ -787,11 +806,18 @@ const saveServerIds = (sessionId: string, serverIds: ReadonlyMap<string, string 
   persist(sessionId)
 }
 
+const loadSessionFile = (sessionId: string, fileId: string) =>
+  pendingFiles.get(sessionId)?.find((file) => file.id === fileId)?.blob ?? db.loadFile(fileId)
+
 /**
  * 附件的服务端 id：已有直接用；正在上传的等待同一任务；否则读取本地原件补传。
  * 本地也没有原件（导入的文档附件只有元数据）时返回 null，该附件只展示、不进入请求。
  */
-const ensureServerId = async (apiKey: string, file: FileAttachment): Promise<string | null> => {
+const ensureServerId = async (
+  sessionId: string,
+  apiKey: string,
+  file: FileAttachment
+): Promise<string | null> => {
   if (file.serverId) {
     return file.serverId
   }
@@ -799,7 +825,7 @@ const ensureServerId = async (apiKey: string, file: FileAttachment): Promise<str
   if (task?.status === 'done') {
     return task.serverId
   }
-  const blob = await db.loadFile(file.id)
+  const blob = await loadSessionFile(sessionId, file.id)
   if (!blob) {
     return null
   }
@@ -851,7 +877,7 @@ const prepareFiles = async (sessionId: string, request: Request, signal: AbortSi
   }
   const uploads = Promise.allSettled(
     request.question.files.map(async (file) => {
-      const serverId = await ensureServerId(apiKey, file)
+      const serverId = await ensureServerId(sessionId, apiKey, file)
       if (serverId && serverId !== file.serverId) {
         serverIds.set(file.id, serverId)
       }
@@ -879,7 +905,7 @@ const prepareFiles = async (sessionId: string, request: Request, signal: AbortSi
   for (const file of pending.values()) {
     throwIfAborted(signal)
     try {
-      const serverId = await Promise.race([ensureServerId(apiKey, file), aborted])
+      const serverId = await Promise.race([ensureServerId(sessionId, apiKey, file), aborted])
       if (serverId) {
         serverIds.set(file.id, serverId)
         saveServerIds(sessionId, new Map([[file.id, serverId]]))
@@ -986,7 +1012,8 @@ const waitForRetry = (attempt: number, signal: AbortSignal) =>
  */
 const streamReply = async (sessionId: string, initial: AssistantMessage, request: Request) => {
   const controller = new AbortController()
-  if (!getSession(sessionId)?.title) {
+  const { chatCompletions, thinking, exaApiKey, exaSearch } = useSettings.getState()
+  if (!chatCompletions && !getSession(sessionId)?.title) {
     titleRequests.add(controller)
   }
   set((state) => ({ streaming: { ...state.streaming, [sessionId]: controller } }))
@@ -1002,38 +1029,65 @@ const streamReply = async (sessionId: string, initial: AssistantMessage, request
   try {
     for (let attempt = 0; ; attempt += 1) {
       /** 附件补齐前出错属于上传失败，请求还没有发出 */
-      let preparing = true
+      let preparing = !chatCompletions
       let receivedContent = false
       try {
-        const prepared = await prepareFiles(sessionId, request, controller.signal)
-        preparing = false
-        // 附件就绪后获取本轮信息；续写沿用原回答快照，重新生成的快照独立保存。
-        const latestReminder = prepared.prefix
-          ? prepared.prefix.latestReminder
-          : createLatestReminder(useSettings.getState())
-        reply = { ...reply, latestReminder }
-        updateReply(sessionId, reply)
-        persist(sessionId)
-        const messages = toRequestMessages(
-          prepared.history,
-          prepared.question,
-          prepared.prefix,
-          initial.thinking ?? false,
-          latestReminder
-        )
-        const events = streamMessage(
-          useSettings.getState().apiKey ?? '',
-          {
-            model: initial.model ?? MODEL,
-            system: SYSTEM_PROMPT,
+        let events
+        if (chatCompletions) {
+          if (exaSearch && exaApiKey && request.question.content.trim()) {
+            const searchSources = await searchExa(
+              exaApiKey,
+              request.question.content,
+              controller.signal
+            )
+            throwIfAborted(controller.signal)
+            reply = { ...reply, searchSources }
+          }
+          const messages = await toChatCompletionMessages(
+            request.history,
+            request.question,
+            reply.searchSources ?? [],
+            (id) => loadSessionFile(sessionId, id),
+            controller.signal
+          )
+          throwIfAborted(controller.signal)
+          events = streamChatCompletions(
+            chatCompletions.endpoint,
+            chatCompletions.model,
             messages,
-            thinking: { type: initial.thinking ? 'enabled' : 'disabled' },
-            safety_check: SAFETY_CHECK,
-            tools: serverTools(initial.search ?? false),
-            ...(titleRequests.has(controller) ? { title: { enabled: true } } : {}),
-          },
-          controller.signal
-        )
+            thinking ? 'max' : 'medium',
+            controller.signal
+          )
+        } else {
+          const prepared = await prepareFiles(sessionId, request, controller.signal)
+          preparing = false
+          // 续写沿用原回答的系统信息快照，重新生成时独立保存。
+          const latestReminder = prepared.prefix
+            ? prepared.prefix.latestReminder
+            : createLatestReminder(useSettings.getState())
+          reply = { ...reply, latestReminder }
+          updateReply(sessionId, reply)
+          persist(sessionId)
+          events = streamMessage(
+            useSettings.getState().apiKey ?? '',
+            {
+              model: initial.model ?? MODEL,
+              system: SYSTEM_PROMPT,
+              messages: toRequestMessages(
+                prepared.history,
+                prepared.question,
+                prepared.prefix,
+                initial.thinking ?? false,
+                latestReminder
+              ),
+              thinking: { type: initial.thinking ? 'enabled' : 'disabled' },
+              safety_check: SAFETY_CHECK,
+              tools: serverTools(initial.search ?? false),
+              ...(titleRequests.has(controller) ? { title: { enabled: true } } : {}),
+            },
+            controller.signal
+          )
+        }
         const blockIndexes = new Map<number, number>()
         for await (const event of events) {
           receivedContent ||= event.type === 'content_block_start'
@@ -1074,6 +1128,7 @@ const streamReply = async (sessionId: string, initial: AssistantMessage, request
         }
         // 附件失效：重新补传后重发。收到过内容块（含丢弃的客户端工具）后不自动重发。
         if (
+          !chatCompletions &&
           attempt < FILE_RETRY_LIMIT &&
           !receivedContent &&
           reuploadInvalidatedFiles(sessionId, request, error)

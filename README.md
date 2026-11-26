@@ -27,6 +27,20 @@ pnpm build
 
 The output is written to `dist/`. Deploy it to a static web server or open `dist/index.html` directly. Opening the file directly requires browser support for storage on `file://` pages and an API service that permits their cross-origin requests.
 
+## Chat Completions
+
+To use a Chat Completions-compatible endpoint, open **Settings → Data** and enter the full Chat Completions URL (for example, `/v1/chat/completions` on the same site). Click **Load models**, choose a model from the list and click **Apply**. The list comes from the matching `/models` endpoint, such as `/v1/models`. Clear the Chat Completions URL and apply to switch back to DeepSeek.
+
+Chat Completions mode streams replies. If the endpoint requires an API key, use a proxy that supplies the key on the server. For an endpoint on another origin, allow requests from the app's origin.
+
+Attach JPEG, PNG, GIF, WebP, PDF, Markdown, plain text or HTML with the paperclip, paste or drag and drop. Images and PDFs are sent inline and require a model and endpoint that accept their corresponding Chat Completions content types. Markdown, text and HTML are read as UTF-8 and sent as text. The chat stores originals locally and includes available recent attachments within a 32 MB attachment budget per request.
+
+DeepThink sends `reasoning_effort: "max"` when on and `reasoning_effort: "medium"` when off. The configured endpoint and model must accept the selected value.
+
+Endpoints that stream DeepSeek-style `delta.reasoning_content` show that text in the collapsible thinking panel above the answer.
+
+To use web search, save your own **Exa API Key** in **Settings → Data** while Chat Completions is active. Turn on **Search** to send the current question directly to Exa. The model receives the resulting titles, links and excerpts, and the reply shows the source list. The key is stored in your browser and sent only to Exa.
+
 ## Features
 
 - Multiple conversations with automatic titles, renaming, and deletion; edit prompts, regenerate replies, and switch between message branches.

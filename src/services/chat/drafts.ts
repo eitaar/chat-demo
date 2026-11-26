@@ -1,6 +1,7 @@
 import { create } from 'zustand'
 import type { TranslationMessage } from '../../i18n/index.js'
 import { createId } from '../../utils/id.js'
+import { chatCompletionFileType, validateChatCompletionFiles } from '../api/chatCompletionFiles.js'
 import {
   cancelUpload,
   isImage,
@@ -16,6 +17,7 @@ export type DraftAttachment = {
   id: string
   file: File
   isImage: boolean
+  inline?: true
 }
 
 type Draft = { text: string; attachments: DraftAttachment[] }
@@ -60,12 +62,16 @@ const upload = (attachment: DraftAttachment, apiKey: string) => {
 export const addDraftFiles = (
   sessionId: string | null,
   files: File[],
-  apiKey: string
+  apiKey: string | null
 ): TranslationMessage | null => {
   if (files.length === 0) {
     return null
   }
-  const error = validateFiles(files, getDraft(sessionId).attachments.length)
+  const attachments = getDraft(sessionId).attachments
+  const error =
+    apiKey === null
+      ? validateChatCompletionFiles([...attachments.map((item) => item.file), ...files])
+      : validateFiles(files, attachments.length)
   if (error) {
     return error
   }
@@ -73,11 +79,16 @@ export const addDraftFiles = (
     (file): DraftAttachment => ({
       id: createId(),
       file,
-      isImage: isImage(resolveMimeType(file)),
+      isImage: isImage(
+        apiKey === null ? (chatCompletionFileType(file.name) ?? '') : resolveMimeType(file)
+      ),
+      ...(apiKey === null ? { inline: true } : {}),
     })
   )
   updateDraft(sessionId, (draft) => ({ ...draft, attachments: [...draft.attachments, ...added] }))
-  added.forEach((attachment) => upload(attachment, apiKey))
+  if (apiKey !== null) {
+    added.forEach((attachment) => upload(attachment, apiKey))
+  }
   return null
 }
 
@@ -92,21 +103,29 @@ export const retryDraftAttachment = (
   }
 }
 
-/** 发送按钮和实际提交共用规则：有内容，且全部附件已上传成功。 */
-export const prepareDraftMessage = (draft: Draft, tasks: Record<string, UploadTask>) => {
+/** 发送按钮和实际提交共用规则：原生上传完成后发送，内联附件直接使用原件。 */
+export const prepareDraftMessage = (
+  draft: Draft,
+  tasks: Record<string, UploadTask>,
+  inline = false
+) => {
   const text = draft.text.trim()
   if (!text && draft.attachments.length === 0) {
     return null
   }
-  const files: (FileAttachment & { serverId: string; blob: Blob })[] = []
+  if (inline && validateChatCompletionFiles(draft.attachments.map((item) => item.file))) {
+    return null
+  }
+  const files: (FileAttachment & { blob: Blob })[] = []
   for (const attachment of draft.attachments) {
     const task = tasks[attachment.id]
-    if (task?.status !== 'done' || !task.serverId) {
+    const serverId = task?.status === 'done' ? task.serverId : null
+    if (!inline && !attachment.inline && !serverId) {
       return null
     }
     files.push({
       id: attachment.id,
-      serverId: task.serverId,
+      serverId,
       name: attachment.file.name,
       size: attachment.file.size,
       isImage: attachment.isImage,

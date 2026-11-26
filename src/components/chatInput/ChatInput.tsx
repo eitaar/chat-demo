@@ -7,7 +7,7 @@ import {
   IconStopFill16,
   IconThinkOutline14,
 } from '../base/icons.js'
-import { setSearch, setThinking, useSettings } from '../../services/settings.js'
+import { setExaSearch, setSearch, setThinking, useSettings } from '../../services/settings.js'
 import { useIsMobile } from '../../app/viewport.js'
 import { sendMessage, stopReply, useChatStore } from '../../services/chat/store.js'
 import {
@@ -24,7 +24,11 @@ import { stopReadAloud } from '../../services/speech/readAloud.js'
 import { IconButton } from '../base/IconButton.js'
 import { Tooltip } from '../base/Tooltip.js'
 import { preloadMarkdown } from '../markdown/Markdown.js'
-import { ensureApiKey } from '../settings/settingsDialogState.js'
+import {
+  CHAT_COMPLETION_FILE_ACCEPT,
+  validateChatCompletionFiles,
+} from '../../services/api/chatCompletionFiles.js'
+import { ensureApiKey, ensureChatConnection } from '../settings/settingsDialogState.js'
 import { DragMask, useFileDrop } from './DragMask.js'
 import { showToast } from '../base/toastState.js'
 import { ACCEPT, useUploads } from '../../services/attachments.js'
@@ -46,14 +50,18 @@ const Input = ({ sessionId }: { sessionId: string | null }) => {
   const draft = useDrafts((state) => state.drafts.get(sessionId) ?? EMPTY_DRAFT)
   const { text, attachments } = draft
   const setText = (value: string) => setDraftText(sessionId, value)
-  const draftReady = useUploads((state) => prepareDraftMessage(draft, state.tasks) !== null)
   const streaming = useChatStore(
     (state) => sessionId !== null && Object.hasOwn(state.streaming, sessionId)
   )
   const thinking = useSettings((state) => state.thinking)
+  const chatCompletions = useSettings((state) => !!state.chatCompletions)
+  const draftReady = useUploads(
+    (state) => prepareDraftMessage(draft, state.tasks, chatCompletions) !== null
+  )
   const importingHistory = useChatStore((state) => state.importingHistory)
   const isMobile = useIsMobile()
-  const search = useSettings((state) => state.search)
+  const showSearch = useSettings((state) => !state.chatCompletions || !!state.exaApiKey)
+  const search = useSettings((state) => (state.chatCompletions ? state.exaSearch : state.search))
   const fileInputRef = useRef<HTMLInputElement>(null)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const togglesRef = useRef<HTMLDivElement>(null)
@@ -73,13 +81,18 @@ const Input = ({ sessionId }: { sessionId: string | null }) => {
     const observer = new ResizeObserver(updateLabels)
     observer.observe(toggles)
     return () => observer.disconnect()
-  }, [t])
+  }, [t, showSearch])
 
   const acceptFiles = (files: File[]) => {
-    if (files.length === 0 || useChatStore.getState().importingHistory || !ensureApiKey()) {
+    if (files.length === 0 || useChatStore.getState().importingHistory || !ensureChatConnection()) {
       return
     }
-    const error = addDraftFiles(sessionId, files, useSettings.getState().apiKey ?? '')
+    const settings = useSettings.getState()
+    const error = addDraftFiles(
+      sessionId,
+      files,
+      settings.chatCompletions ? null : (settings.apiKey ?? '')
+    )
     if (error) {
       showToast(error)
     }
@@ -115,8 +128,13 @@ const Input = ({ sessionId }: { sessionId: string | null }) => {
     })
   })
 
-  // 欢迎页导入后会话 ID 不变，不能依赖卸载取消语音；订阅开始事件也覆盖快速完成的导入。
   const cancelVoice = voice.cancel
+  useEffect(() => {
+    if (chatCompletions) {
+      cancelVoice()
+    }
+  }, [chatCompletions, cancelVoice])
+  // 欢迎页导入后会话 ID 不变，不能依赖卸载取消语音；订阅开始事件也覆盖快速完成的导入。
   useEffect(
     () =>
       useChatStore.subscribe((state, previous) => {
@@ -134,15 +152,23 @@ const Input = ({ sessionId }: { sessionId: string | null }) => {
   const canSend = !importingHistory && !streaming && voice.status === 'idle' && draftReady
 
   const send = () => {
+    const currentDraft = getDraft(sessionId)
+    const inline = !!useSettings.getState().chatCompletions
+    const fileError =
+      inline && validateChatCompletionFiles(currentDraft.attachments.map((item) => item.file))
+    if (fileError) {
+      showToast(fileError)
+      return
+    }
     if (
       useChatStore.getState().importingHistory ||
       voice.status !== 'idle' ||
-      !prepareDraftMessage(getDraft(sessionId), useUploads.getState().tasks)
+      !prepareDraftMessage(currentDraft, useUploads.getState().tasks, inline)
     ) {
       return
     }
     // 文本与上传完成态由提交动作读取最新快照，不使用上一次渲染的草稿。
-    if (!ensureApiKey() || !sendMessage(sessionId)) {
+    if (!ensureChatConnection() || !sendMessage(sessionId)) {
       return
     }
     preloadMarkdown()
@@ -163,7 +189,12 @@ const Input = ({ sessionId }: { sessionId: string | null }) => {
         }
       }}
     >
-      <DraftAttachments items={attachments} onRetry={retryFile} onRemove={removeFile} />
+      <DraftAttachments
+        items={attachments}
+        inline={chatCompletions}
+        onRetry={chatCompletions ? undefined : retryFile}
+        onRemove={removeFile}
+      />
       <div className={styles.textareaWrapper}>
         <textarea
           ref={textareaRef}
@@ -204,7 +235,9 @@ const Input = ({ sessionId }: { sessionId: string | null }) => {
       <div className={styles.functionRow}>
         {/* 深度思考 / 智能搜索开关，tooltip 在按钮上方 */}
         <div ref={togglesRef} className={styles.toggles}>
-          <Tooltip content={t('deactivatedThinkTooltip')}>
+          <Tooltip
+            content={t(chatCompletions ? 'chatCompletionsThinkTooltip' : 'deactivatedThinkTooltip')}
+          >
             <button
               type="button"
               className={clsx(styles.toggle, thinking && styles.selected)}
@@ -216,47 +249,51 @@ const Input = ({ sessionId }: { sessionId: string | null }) => {
               <span className={styles.toggleLabel}>{t('thinkingSwitch')}</span>
             </button>
           </Tooltip>
-          <Tooltip content={t('deactivatedSearchTooltip')}>
-            <button
-              type="button"
-              className={clsx(styles.toggle, search && styles.selected)}
-              aria-label={t('search')}
-              aria-pressed={search}
-              onClick={() => setSearch(!search)}
-            >
-              <IconGlobeLanguageOutline14 />
-              <span className={styles.toggleLabel}>{t('search')}</span>
-            </button>
-          </Tooltip>
+          {showSearch ? (
+            <Tooltip content={t(chatCompletions ? 'exaSearchTooltip' : 'deactivatedSearchTooltip')}>
+              <button
+                type="button"
+                className={clsx(styles.toggle, search && styles.selected)}
+                aria-label={t('search')}
+                aria-pressed={search}
+                onClick={() => (chatCompletions ? setExaSearch : setSearch)(!search)}
+              >
+                <IconGlobeLanguageOutline14 />
+                <span className={styles.toggleLabel}>{t('search')}</span>
+              </button>
+            </Tooltip>
+          ) : null}
         </div>
         <div className={styles.right}>
-          <VoiceButton
-            status={voice.status}
-            disabled={!voice.available}
-            seconds={voice.seconds}
-            onClick={() => {
-              if (
-                voice.status !== 'idle' ||
-                (!useChatStore.getState().importingHistory && ensureApiKey())
-              ) {
-                void voice.toggle()
-              }
-            }}
-          />
+          {chatCompletions ? null : (
+            <VoiceButton
+              status={voice.status}
+              disabled={!voice.available}
+              seconds={voice.seconds}
+              onClick={() => {
+                if (
+                  voice.status !== 'idle' ||
+                  (!useChatStore.getState().importingHistory && ensureApiKey())
+                ) {
+                  void voice.toggle()
+                }
+              }}
+            />
+          )}
           <IconButton
             size="m"
             tone="primary"
             icon={<IconPaperclipOutline16 />}
             tooltip={t('uploadFile')}
             disabled={importingHistory}
-            onClick={() => ensureApiKey() && fileInputRef.current?.click()}
+            onClick={() => ensureChatConnection() && fileInputRef.current?.click()}
           />
           <input
             ref={fileInputRef}
             type="file"
             multiple
             hidden
-            accept={ACCEPT}
+            accept={chatCompletions ? CHAT_COMPLETION_FILE_ACCEPT : ACCEPT}
             onChange={(event) => {
               acceptFiles(Array.from(event.target.files ?? []))
               event.target.value = ''
@@ -287,7 +324,7 @@ const Input = ({ sessionId }: { sessionId: string | null }) => {
           )}
         </div>
       </div>
-      {dragging ? <DragMask /> : null}
+      {dragging ? <DragMask inline={chatCompletions} /> : null}
     </div>
   )
 }

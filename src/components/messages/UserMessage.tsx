@@ -6,10 +6,11 @@ import { IconEditOutline16 } from '../base/icons.js'
 import { getFileViewType, isImage } from '../../services/attachments.js'
 import { editMessage, retryUpload } from '../../services/chat/store.js'
 import { stopReadAloud } from '../../services/speech/readAloud.js'
+import { useSettings } from '../../services/settings.js'
 import type { UserMessage as UserMessageType } from '../../services/chat/types.js'
 import { Button } from '../base/Button.js'
 import { IconButton } from '../base/IconButton.js'
-import { ensureApiKey } from '../settings/settingsDialogState.js'
+import { ensureChatConnection } from '../settings/settingsDialogState.js'
 import {
   BranchSwitcher,
   type MessageVersions,
@@ -40,6 +41,7 @@ export const UserMessage = memo(function UserMessage({
   onSelectVersion: SelectMessageVersion
 }) {
   const t = useTranslate()
+  const chatCompletions = useSettings((state) => !!state.chatCompletions)
   const [editing, setEditing] = useState(false)
   const [draft, setDraft] = useState(message.content)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
@@ -55,7 +57,7 @@ export const UserMessage = memo(function UserMessage({
   }, [editing, draft])
 
   const sendEdit = () => {
-    if (canSend && ensureApiKey() && editMessage(sessionId, message.id, draft.trim())) {
+    if (canSend && ensureChatConnection() && editMessage(sessionId, message.id, draft.trim())) {
       stopReadAloud()
       setEditing(false)
     }
@@ -75,7 +77,11 @@ export const UserMessage = memo(function UserMessage({
             <MessageFile
               key={file.id}
               file={file}
-              onRetry={retryUploadId ? () => retryUpload(sessionId, retryUploadId) : null}
+              onRetry={
+                retryUploadId && !chatCompletions
+                  ? () => retryUpload(sessionId, retryUploadId)
+                  : null
+              }
             />
           ))}
         </div>

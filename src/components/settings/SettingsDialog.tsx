@@ -1,5 +1,5 @@
 import clsx from 'clsx'
-import { useRef, useState, type ReactNode } from 'react'
+import { useEffect, useId, useRef, useState, type ReactNode } from 'react'
 import {
   IconDarkOutline16,
   IconDataOutline16,
@@ -17,10 +17,15 @@ import {
   importHistory,
 } from '../../services/chat/backup.js'
 import { useIsMobile } from '../../app/viewport.js'
+import { listChatCompletionsModels } from '../../services/api/client.js'
 import { useChatStore } from '../../services/chat/store.js'
 import { regionCodes, getRegionName, provinces } from '../../services/location.js'
 import {
   isChineseBrowser,
+  parseChatCompletionsEndpoint,
+  parseChatCompletionsSettings,
+  setChatCompletions,
+  setExaApiKey,
   setLocale,
   setLocation,
   setThemePreference,
@@ -63,6 +68,7 @@ const SettingsContent = ({
 }) => {
   const t = useTranslate()
   const isMobile = useIsMobile()
+  const chatCompletions = useSettings((state) => state.chatCompletions)
   // 打开时按调用方指定的分组选中，之后在弹窗内切换
   const [section, setSection] = useState(() => useSettingsDialog.getState().section)
   // 切换分组不丢失正在输入的 API Key
@@ -109,7 +115,8 @@ const SettingsContent = ({
             </>
           ) : (
             <>
-              <ApiKeyField editor={apiKeyEditor} />
+              <ChatCompletionsSetting />
+              {chatCompletions ? <ExaApiKeySetting /> : <ApiKeyField editor={apiKeyEditor} />}
               <ImportHistory historyImport={historyImport} disabled={historyBusy} />
               <ExportHistory disabled={historyBusy} />
               <SettingCell
@@ -127,7 +134,7 @@ const SettingsContent = ({
                   </Button>
                 }
               />
-              {isMobile ? <ApiKeyConfirm editor={apiKeyEditor} /> : null}
+              {isMobile && !chatCompletions ? <ApiKeyConfirm editor={apiKeyEditor} /> : null}
             </>
           )}
         </div>
@@ -135,6 +142,196 @@ const SettingsContent = ({
       {historyImport.file ? <ImportConfirm historyImport={historyImport} /> : null}
       {historyDelete.opened ? <DeleteAllConfirm historyDelete={historyDelete} /> : null}
     </>
+  )
+}
+
+type ModelRequest = { endpoint: string }
+
+const ChatCompletionsSetting = () => {
+  const t = useTranslate()
+  const config = useSettings((state) => state.chatCompletions)
+  const [endpoint, setEndpoint] = useState(config?.endpoint ?? '')
+  const [selectedModel, setSelectedModel] = useState('')
+  const [invalid, setInvalid] = useState(false)
+  const [modelRequest, setModelRequest] = useState<ModelRequest | null>(() =>
+    config ? { endpoint: config.endpoint } : null
+  )
+  const [modelResponse, setModelResponse] = useState<{
+    request: ModelRequest
+    models: string[] | null
+  } | null>(null)
+  const modelSelectId = useId()
+  const validEndpoint = parseChatCompletionsEndpoint(endpoint)
+  const savedModel = config && validEndpoint === config.endpoint ? config.model : ''
+  const response = modelResponse?.request === modelRequest ? modelResponse : null
+  const loadingModels = modelRequest !== null && response === null
+  const modelIds = response?.models ?? []
+  const options =
+    savedModel && !modelIds.includes(savedModel) ? [savedModel, ...modelIds] : modelIds
+  const model = options.includes(selectedModel) ? selectedModel : savedModel
+
+  useEffect(() => {
+    if (!modelRequest) {
+      return
+    }
+    const controller = new AbortController()
+    const signal = controller.signal
+    void listChatCompletionsModels(modelRequest.endpoint, signal).then(
+      (models) => {
+        if (!signal.aborted) {
+          setModelResponse({ request: modelRequest, models })
+        }
+      },
+      () => {
+        if (!signal.aborted) {
+          setModelResponse({ request: modelRequest, models: null })
+        }
+      }
+    )
+    return () => controller.abort()
+  }, [modelRequest])
+
+  return (
+    <form
+      className={clsx(styles.cell, styles.apiKey)}
+      onSubmit={(event) => {
+        event.preventDefault()
+        const next = parseChatCompletionsSettings(endpoint, model)
+        if (endpoint.trim() && !next) {
+          setInvalid(true)
+          return
+        }
+        setInvalid(false)
+        setEndpoint(next?.endpoint ?? '')
+        setChatCompletions(next)
+      }}
+    >
+      <label>
+        <span className={styles.label}>{t('chatCompletionsUrl')}</span>
+        <span className={styles.apiKeyInput}>
+          <input
+            placeholder="/v1/chat/completions"
+            value={endpoint}
+            onChange={(event) => {
+              const value = event.target.value
+              if (value.trim() !== endpoint.trim()) {
+                setSelectedModel('')
+                setModelRequest(null)
+              }
+              setInvalid(false)
+              setEndpoint(value)
+            }}
+            autoCapitalize="none"
+            spellCheck={false}
+          />
+        </span>
+      </label>
+      <div>
+        <label className={styles.label} htmlFor={modelSelectId}>
+          {t('chatCompletionsModel')}
+        </label>
+        <div className={styles.apiKeyInput}>
+          <select
+            id={modelSelectId}
+            value={model}
+            disabled={options.length === 0}
+            onChange={(event) => {
+              setSelectedModel(event.target.value)
+              setInvalid(false)
+            }}
+          >
+            <option value="" disabled>
+              {t('chatCompletionsModelPlaceholder')}
+            </option>
+            {options.map((id) => (
+              <option key={id} value={id}>
+                {id}
+              </option>
+            ))}
+          </select>
+          <span className={styles.divider} />
+          <button
+            type="button"
+            className={styles.confirm}
+            disabled={!validEndpoint || loadingModels}
+            onClick={() => {
+              if (validEndpoint) {
+                setModelRequest({ endpoint: validEndpoint })
+              }
+            }}
+          >
+            {t(loadingModels ? 'chatCompletionsModelsLoading' : 'chatCompletionsLoadModels')}
+          </button>
+        </div>
+      </div>
+      {response?.models === null ? (
+        <div role="alert" className={styles.error}>
+          {t('chatCompletionsModelsError')}
+        </div>
+      ) : response?.models.length === 0 ? (
+        <div role="status" className={styles.description}>
+          {t('chatCompletionsModelsEmpty')}
+        </div>
+      ) : null}
+      <div className={styles.description}>{t('chatCompletionsDescription')}</div>
+      {invalid ? (
+        <div role="alert" className={styles.error}>
+          {t('chatCompletionsInvalid')}
+        </div>
+      ) : null}
+      <Button
+        type="submit"
+        variant="outlined"
+        size="m"
+        disabled={endpoint === (config?.endpoint ?? '') && model === (config?.model ?? '')}
+      >
+        {t('chatCompletionsApply')}
+      </Button>
+    </form>
+  )
+}
+
+const ExaApiKeySetting = () => {
+  const t = useTranslate()
+  const saved = useSettings((state) => !!state.exaApiKey)
+  const [value, setValue] = useState('')
+  const apiKey = value.trim()
+
+  return (
+    <form
+      className={clsx(styles.cell, styles.apiKey)}
+      onSubmit={(event) => {
+        event.preventDefault()
+        if (apiKey) {
+          setExaApiKey(apiKey)
+          setValue('')
+        }
+      }}
+    >
+      <label>
+        <span className={styles.label}>{t('exaApiKey')}</span>
+        <span className={styles.apiKeyInput}>
+          <input
+            type="password"
+            placeholder={t(saved ? 'exaKeySaved' : 'apiKeyPlaceholder')}
+            autoComplete="off"
+            spellCheck={false}
+            value={value}
+            onChange={(event) => setValue(event.target.value)}
+          />
+        </span>
+      </label>
+      <div className={styles.description}>{t('exaKeyDescription')}</div>
+      {apiKey ? (
+        <Button type="submit" variant="outlined" size="m">
+          {t('exaKeySave')}
+        </Button>
+      ) : saved ? (
+        <Button variant="outlined" size="m" onClick={() => setExaApiKey(null)}>
+          {t('exaKeyRemove')}
+        </Button>
+      ) : null}
+    </form>
   )
 }
 

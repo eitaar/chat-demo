@@ -23,3 +23,5 @@ export const ensureApiKey = () => {
   openSettings('data')
   return false
 }
+
+export const ensureChatConnection = () => !!useSettings.getState().chatCompletions || ensureApiKey()

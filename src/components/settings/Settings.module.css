@@ -307,7 +307,8 @@
     border-color: var(--dsw-alias-brand-primary);
   }
 
-  input {
+  input,
+  select {
     flex: 1;
     min-width: 0;
     height: 100%;
@@ -322,6 +323,11 @@
     &::placeholder {
       color: var(--dsw-alias-label-caption);
     }
+  }
+
+  select option {
+    background: var(--dsw-specific-menu);
+    color: var(--dsw-alias-label-primary);
   }
 }
 

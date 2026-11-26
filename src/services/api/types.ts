@@ -200,7 +200,11 @@ export type MessageUsage = {
 }
 
 /** content_block_start 携带的初始内容块；工具块已是完整内容 */
-export type OutputBlockStart = TextBlock | ThinkingBlock | ServerToolBlock | ToolUseBlock
+export type OutputBlockStart =
+  | TextBlock
+  | (Omit<ThinkingBlock, 'signature'> & { signature?: string })
+  | ServerToolBlock
+  | ToolUseBlock
 
 export type ContentBlockDelta =
   | { type: 'text_delta'; text: string }

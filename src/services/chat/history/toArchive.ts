@@ -122,7 +122,7 @@ const toolFragment = (tool: ServerToolUseBlock, result: ReplyBlock | undefined):
  * 本轮调用过联网能力时，剥除模型原样输出的 [citation:N]。
  */
 const assistantFragments = (message: AssistantMessage): Fragment[] => {
-  const { blocks } = message
+  const { blocks, searchSources } = message
   const results = new Map<string, ReplyBlock>()
   for (const block of blocks) {
     if (block.type === 'web_search_tool_result' || block.type === 'web_fetch_tool_result') {
@@ -131,6 +131,20 @@ const assistantFragments = (message: AssistantMessage): Fragment[] => {
   }
   const usedWeb = blocks.some((block) => block.type === 'server_tool_use')
   const fragments: Fragment[] = []
+  if (searchSources?.length) {
+    fragments.push({
+      type: 'TOOL_SEARCH',
+      status: 'FINISHED',
+      queries: [],
+      results: searchSources.map(({ url, title, excerpt }) => ({
+        url,
+        title,
+        snippet: excerpt,
+        published_at: null,
+        site_name: null,
+      })),
+    })
+  }
   let response: { type: 'RESPONSE' | 'TEMPLATE_RESPONSE'; content: string } | undefined
   for (const block of blocks) {
     if (block.type === 'text') {
@@ -248,7 +262,7 @@ export const toSessionFile = (original: Session, exportImage: ExportImage): Sess
       role: message.role === 'user' ? 'USER' : 'ASSISTANT',
       status: message.role === 'user' ? 'FINISHED' : replyStatus(message),
       thinking_enabled: reply?.thinking ?? false,
-      search_enabled: reply?.search ?? false,
+      search_enabled: reply?.search ?? Boolean(reply?.searchSources?.length),
       accumulated_token_usage: message.role === 'user' ? 0 : contextTokens(message),
       inserted_at: iso(message.createdAt),
       fragments:

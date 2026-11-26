@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { useTranslate } from '../../i18n/index.js'
+import { CHAT_COMPLETION_FILE_LIMIT_MB } from '../../services/api/chatCompletionFiles.js'
 import { MAX_COUNT, MAX_SIZE_MB } from '../../services/attachments.js'
 import styles from './DragMask.module.css'
 
@@ -57,9 +58,10 @@ export const useFileDrop = (onDrop: (files: File[]) => void) => {
 }
 
 /** 拖拽遮罩，挂到 body 上盖住整个页面 */
-export const DragMask = () => createPortal(<DragMaskContent />, document.body)
+export const DragMask = ({ inline }: { inline: boolean }) =>
+  createPortal(<DragMaskContent inline={inline} />, document.body)
 
-const DragMaskContent = () => {
+const DragMaskContent = ({ inline }: { inline: boolean }) => {
   const t = useTranslate()
   return (
     <div className={styles.mask}>
@@ -67,7 +69,10 @@ const DragMaskContent = () => {
         <UploadIcon />
         <div className={styles.title}>{t('dragFileToUpload')}</div>
         <div className={styles.desc}>
-          {t('dragFileDesc', { count: MAX_COUNT, size: MAX_SIZE_MB })}
+          {t(inline ? 'chatCompletionsDragFiles' : 'dragFileDesc', {
+            count: MAX_COUNT,
+            size: inline ? CHAT_COMPLETION_FILE_LIMIT_MB : MAX_SIZE_MB,
+          })}
         </div>
       </div>
     </div>

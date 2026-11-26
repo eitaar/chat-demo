@@ -8,6 +8,7 @@ import type {
   FileObject,
   FilePurpose,
   MessageStreamEvent,
+  StopReason,
 } from './types.js'
 
 /** 构建期 API 地址，默认 https://api.deepseek.com；本地开发支持开发服务器代理 */
@@ -99,6 +100,33 @@ export const verifyApiKey = async (apiKey: string, signal?: AbortSignal): Promis
   })
 }
 
+export const listChatCompletionsModels = async (
+  endpoint: string,
+  signal: AbortSignal
+): Promise<string[]> => {
+  const url = new URL(endpoint, window.location.href)
+  const path = url.pathname.replace(/\/+$/, '')
+  const chatPath = '/chat/completions'
+  const prefix = path.endsWith(chatPath)
+    ? path.slice(0, -chatPath.length)
+    : path.slice(0, path.lastIndexOf('/'))
+  url.pathname = `${prefix}/models`
+
+  const response = await request(url.href, {
+    method: 'GET',
+    headers: { Accept: 'application/json' },
+    signal,
+  })
+  const payload = (await response.json()) as { data?: { id?: unknown }[] } | null
+  if (!Array.isArray(payload?.data)) {
+    throw new ApiError('protocol', 'Expected a model list')
+  }
+  const modelIds = payload.data.flatMap((model) =>
+    typeof model?.id === 'string' && model.id.trim() ? [model.id.trim()] : []
+  )
+  return [...new Set(modelIds)]
+}
+
 /**
  * POST /anthropic/v1/files 上传附件（不设过期时间，会话里的历史附件一直可用）。
  * purpose 为 null 时不传该字段（图片）；purpose 必须排在 file 之前。
@@ -187,4 +215,118 @@ export async function* streamMessage(
   }
   // 服务端没有提供错误内容时保持为空，不推测断流原因。
   throw new ApiError('interrupted', '')
+}
+
+export type ChatCompletionPart =
+  | { type: 'text'; text: string }
+  | { type: 'image_url'; image_url: { url: string } }
+  | { type: 'file'; file: { filename: string; file_data: string } }
+
+export type ChatCompletionUserMessage = {
+  role: 'user'
+  content: string | ChatCompletionPart[]
+}
+
+export type ChatCompletionMessage =
+  | ChatCompletionUserMessage
+  | { role: 'assistant'; content: string }
+
+const completionStopReason = (reason: string): StopReason => {
+  switch (reason) {
+    case 'length':
+      return 'max_tokens'
+    case 'content_filter':
+      return 'refusal'
+    case 'tool_calls':
+    case 'function_call':
+      return 'tool_use'
+    default:
+      return 'end_turn'
+  }
+}
+
+/** Adapt Chat Completions reasoning and text chunks to the shared reply events. */
+export async function* streamChatCompletions(
+  endpoint: string,
+  model: string,
+  messages: ChatCompletionMessage[],
+  reasoningEffort: 'medium' | 'max',
+  signal: AbortSignal
+): AsyncGenerator<MessageStreamEvent> {
+  const response = await request(endpoint, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Accept: 'text/event-stream' },
+    body: JSON.stringify({ model, messages, stream: true, reasoning_effort: reasoningEffort }),
+    signal,
+  })
+  const contentType = response.headers.get('Content-Type') ?? ''
+  if (!response.body || !contentType.includes('text/event-stream')) {
+    throw await readErrorResponse(response, 'protocol', 'Expected a text/event-stream response')
+  }
+
+  let blockType: 'thinking' | 'text' | null = null
+  let index = 0
+  for await (const { event, data } of readServerSentEvents(response.body, signal)) {
+    if (data === '[DONE]') {
+      if (blockType) {
+        yield { type: 'content_block_stop', index }
+      }
+      yield { type: 'message_stop' }
+      return
+    }
+    let chunk: {
+      choices?: {
+        delta?: { content?: string | null; reasoning_content?: string | null }
+        finish_reason?: string | null
+      }[]
+    } | null
+    try {
+      chunk = JSON.parse(data)
+    } catch {
+      throw new ApiError(event === 'error' ? 'stream' : 'protocol', data)
+    }
+    if (isErrorBody(chunk) || event === 'error') {
+      throw new ApiError('stream', isErrorBody(chunk) ? chunk.error.message : data)
+    }
+
+    const choice = chunk?.choices?.[0]
+    const fragments = [
+      ['thinking', choice?.delta?.reasoning_content],
+      ['text', choice?.delta?.content],
+    ] as const
+    for (const [type, fragment] of fragments) {
+      if (typeof fragment !== 'string' || !fragment) {
+        continue
+      }
+      if (blockType !== type) {
+        if (blockType) {
+          yield { type: 'content_block_stop', index }
+          index += 1
+        }
+        blockType = type
+        yield {
+          type: 'content_block_start',
+          index,
+          content_block:
+            type === 'thinking' ? { type, thinking: fragment } : { type, text: fragment },
+        }
+      } else {
+        yield {
+          type: 'content_block_delta',
+          index,
+          delta:
+            type === 'thinking'
+              ? { type: 'thinking_delta', thinking: fragment }
+              : { type: 'text_delta', text: fragment },
+        }
+      }
+    }
+    if (typeof choice?.finish_reason === 'string') {
+      yield {
+        type: 'message_delta',
+        delta: { stop_reason: completionStopReason(choice.finish_reason), stop_sequence: null },
+      }
+    }
+  }
+  throw new ApiError('interrupted', { key: 'chatCompletionsInterrupted' })
 }

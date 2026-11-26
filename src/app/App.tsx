@@ -14,7 +14,7 @@ import { closeSearchPanel } from '../components/search/searchPanelState.js'
 import { SessionView } from '../components/session/SessionView.js'
 import { MobileHeader } from '../components/session/MobileHeader.js'
 import { Welcome } from '../components/session/Welcome.js'
-import { ensureApiKey } from '../components/settings/settingsDialogState.js'
+import { ensureChatConnection } from '../components/settings/settingsDialogState.js'
 import { SettingsDialog } from '../components/settings/SettingsDialog.js'
 import { Toast } from '../components/base/Toast.js'
 import { showToast } from '../components/base/toastState.js'
@@ -30,6 +30,7 @@ export const App = () => {
   const t = useTranslate()
   const isMobile = useIsMobile()
   const locale = useSettings((state) => state.locale)
+  const chatCompletions = useSettings((state) => state.chatCompletions)
   // 移动端侧边栏以独立抽屉管理开合状态
   const siderCollapsed = useSettings((state) => state.siderCollapsed) && !isMobile
   const ready = useChatStore((state) => state.ready)
@@ -63,14 +64,13 @@ export const App = () => {
   // 搜索结果面板只属于当前会话
   useEffect(closeSearchPanel, [activeId])
   // 切换会话时停止朗读
-  useEffect(stopReadAloud, [activeId])
+  useEffect(stopReadAloud, [activeId, chatCompletions])
   // 移动端选中会话、切换布局后收起抽屉
   useEffect(closeMobileSider, [activeId, isMobile])
 
   useEffect(() => {
     void initChat()
-    // 首次打开先在设置里输入 API Key
-    ensureApiKey()
+    ensureChatConnection()
   }, [])
 
   return (
