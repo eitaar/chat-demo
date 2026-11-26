@@ -127,6 +127,8 @@ export const en = {
   chatCompletionsEmptyMessage: 'Enter a message or attach a file.',
   chatCompletionsDragFiles: 'Up to {count} files, {size} MB total',
   chatCompletionsInterrupted: 'The Chat Completions stream ended unexpectedly.',
+  chatCompletionsInvalidToolCall: 'The model returned an invalid web search request.',
+  chatCompletionsSearchLimit: 'The model requested too many web searches for one reply.',
   chatCompletionsThinkTooltip: 'Reasoning effort is max when on and medium when off',
   exaApiKey: 'Exa API Key',
   exaKeySaved: 'Exa key saved',

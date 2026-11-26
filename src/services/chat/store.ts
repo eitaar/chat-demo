@@ -1034,19 +1034,26 @@ const streamReply = async (sessionId: string, initial: AssistantMessage, request
       try {
         let events
         if (chatCompletions) {
-          if (exaSearch && exaApiKey && request.question.content.trim()) {
-            const searchSources = await searchExa(
-              exaApiKey,
-              request.question.content,
-              controller.signal
-            )
-            throwIfAborted(controller.signal)
-            reply = { ...reply, searchSources }
-          }
+          const search =
+            exaSearch && exaApiKey
+              ? async (query: string) => {
+                  const results = await searchExa(exaApiKey, query, controller.signal)
+                  throwIfAborted(controller.signal)
+                  const sources = new Map(
+                    (reply.searchSources ?? []).map((source) => [source.url, source])
+                  )
+                  for (const source of results) {
+                    sources.set(source.url, source)
+                  }
+                  reply = { ...reply, searchSources: [...sources.values()] }
+                  flush()
+                  return JSON.stringify(results)
+                }
+              : undefined
           const messages = await toChatCompletionMessages(
             request.history,
             request.question,
-            reply.searchSources ?? [],
+            Boolean(search),
             (id) => loadSessionFile(sessionId, id),
             controller.signal
           )
@@ -1055,7 +1062,8 @@ const streamReply = async (sessionId: string, initial: AssistantMessage, request
             chatCompletions,
             messages,
             thinking ? 'max' : 'medium',
-            controller.signal
+            controller.signal,
+            search
           )
         } else {
           const prepared = await prepareFiles(sessionId, request, controller.signal)

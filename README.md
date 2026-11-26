@@ -39,7 +39,7 @@ DeepThink sends `reasoning_effort: "max"` when on and `reasoning_effort: "medium
 
 Endpoints that stream DeepSeek-style `delta.reasoning_content` show that text in the collapsible thinking panel above the answer.
 
-To use web search, save your own **Exa API Key** in **Settings → Data** while Chat Completions is active. Turn on **Search** to send the current question directly to Exa. The model receives the resulting titles, links and excerpts, and the reply shows the source list. The key is stored in your browser and sent only to Exa.
+To use web search, save your own **Exa API Key** in **Settings → Data** and select a Chat Completions model that supports function calling. Turn on **Search** to let the model request a web search when needed. The browser sends the model's search query to Exa, passes the results back to the model, and displays the sources with the reply. The key is stored in your browser and sent only to Exa.
 
 ## Features
 
