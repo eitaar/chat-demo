@@ -37,6 +37,8 @@ Chat Completions 模式会流式显示回复。如果接口需要 API Key，请�
 
 开启深度思考时发送 `reasoning_effort: "max"`，关闭时发送 `reasoning_effort: "medium"`。所配置的接口和模型需支持对应的值。
 
+如果接口以 DeepSeek 兼容格式流式返回 `delta.reasoning_content`，推理内容会显示在回答上方的可折叠思考区域。
+
 使用网页搜索时，请在 Chat Completions 模式的**设置 → 数据管理**中保存自己的 **Exa API Key**。打开**搜索**后，本轮问题直接发送给 Exa，获得的标题、链接和摘录会提供给模型，回复中会显示来源列表。密钥保存在当前浏览器，仅发送给 Exa。
 
 ## 功能

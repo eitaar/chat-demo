@@ -245,7 +245,7 @@ const completionStopReason = (reason: string): StopReason => {
   }
 }
 
-/** Adapt text chunks from Chat Completions to the shared reply events. */
+/** Adapt Chat Completions reasoning and text chunks to the shared reply events. */
 export async function* streamChatCompletions(
   endpoint: string,
   model: string,
@@ -264,15 +264,19 @@ export async function* streamChatCompletions(
     throw await readErrorResponse(response, 'protocol', 'Expected a text/event-stream response')
   }
 
-  let started = false
+  let blockType: 'thinking' | 'text' | null = null
+  let index = 0
   for await (const { event, data } of readServerSentEvents(response.body, signal)) {
     if (data === '[DONE]') {
+      if (blockType) {
+        yield { type: 'content_block_stop', index }
+      }
       yield { type: 'message_stop' }
       return
     }
     let chunk: {
       choices?: {
-        delta?: { content?: string | null }
+        delta?: { content?: string | null; reasoning_content?: string | null }
         finish_reason?: string | null
       }[]
     } | null
@@ -286,13 +290,35 @@ export async function* streamChatCompletions(
     }
 
     const choice = chunk?.choices?.[0]
-    const text = choice?.delta?.content
-    if (typeof text === 'string' && text) {
-      if (!started) {
-        started = true
-        yield { type: 'content_block_start', index: 0, content_block: { type: 'text', text } }
+    const fragments = [
+      ['thinking', choice?.delta?.reasoning_content],
+      ['text', choice?.delta?.content],
+    ] as const
+    for (const [type, fragment] of fragments) {
+      if (typeof fragment !== 'string' || !fragment) {
+        continue
+      }
+      if (blockType !== type) {
+        if (blockType) {
+          yield { type: 'content_block_stop', index }
+          index += 1
+        }
+        blockType = type
+        yield {
+          type: 'content_block_start',
+          index,
+          content_block:
+            type === 'thinking' ? { type, thinking: fragment } : { type, text: fragment },
+        }
       } else {
-        yield { type: 'content_block_delta', index: 0, delta: { type: 'text_delta', text } }
+        yield {
+          type: 'content_block_delta',
+          index,
+          delta:
+            type === 'thinking'
+              ? { type: 'thinking_delta', thinking: fragment }
+              : { type: 'text_delta', text: fragment },
+        }
       }
     }
     if (typeof choice?.finish_reason === 'string') {
