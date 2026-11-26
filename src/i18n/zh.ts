@@ -106,6 +106,7 @@ export const zh = {
   chatCompletionsInvalid: '请输入 HTTP(S) 地址或以 / 开头的路径，以及模型 ID。',
   chatCompletionsTextOnly: 'Chat Completions 仅支持文本。请移除附件后再发送。',
   chatCompletionsInterrupted: 'Chat Completions 响应流意外中断。',
+  chatCompletionsThinkTooltip: '开启时推理强度为 max，关闭时为 medium',
   apiKeyEdit: '修改 API Key',
   apiKeyPlaceholder: '请输入 API Key',
   apiKeyVerifying: '正在验证...',

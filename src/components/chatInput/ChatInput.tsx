@@ -228,33 +228,33 @@ const Input = ({ sessionId }: { sessionId: string | null }) => {
       <div className={styles.functionRow}>
         {/* 深度思考 / 智能搜索开关，tooltip 在按钮上方 */}
         <div ref={togglesRef} className={styles.toggles}>
+          <Tooltip
+            content={t(chatCompletions ? 'chatCompletionsThinkTooltip' : 'deactivatedThinkTooltip')}
+          >
+            <button
+              type="button"
+              className={clsx(styles.toggle, thinking && styles.selected)}
+              aria-label={t('thinkingSwitch')}
+              aria-pressed={thinking}
+              onClick={() => setThinking(!thinking)}
+            >
+              <IconThinkOutline14 />
+              <span className={styles.toggleLabel}>{t('thinkingSwitch')}</span>
+            </button>
+          </Tooltip>
           {chatCompletions ? null : (
-            <>
-              <Tooltip content={t('deactivatedThinkTooltip')}>
-                <button
-                  type="button"
-                  className={clsx(styles.toggle, thinking && styles.selected)}
-                  aria-label={t('thinkingSwitch')}
-                  aria-pressed={thinking}
-                  onClick={() => setThinking(!thinking)}
-                >
-                  <IconThinkOutline14 />
-                  <span className={styles.toggleLabel}>{t('thinkingSwitch')}</span>
-                </button>
-              </Tooltip>
-              <Tooltip content={t('deactivatedSearchTooltip')}>
-                <button
-                  type="button"
-                  className={clsx(styles.toggle, search && styles.selected)}
-                  aria-label={t('search')}
-                  aria-pressed={search}
-                  onClick={() => setSearch(!search)}
-                >
-                  <IconGlobeLanguageOutline14 />
-                  <span className={styles.toggleLabel}>{t('search')}</span>
-                </button>
-              </Tooltip>
-            </>
+            <Tooltip content={t('deactivatedSearchTooltip')}>
+              <button
+                type="button"
+                className={clsx(styles.toggle, search && styles.selected)}
+                aria-label={t('search')}
+                aria-pressed={search}
+                onClick={() => setSearch(!search)}
+              >
+                <IconGlobeLanguageOutline14 />
+                <span className={styles.toggleLabel}>{t('search')}</span>
+              </button>
+            </Tooltip>
           )}
         </div>
         <div className={styles.right}>

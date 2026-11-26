@@ -112,6 +112,7 @@ export const en = {
   chatCompletionsTextOnly:
     'Chat Completions supports text only. Remove attachments before sending.',
   chatCompletionsInterrupted: 'The Chat Completions stream ended unexpectedly.',
+  chatCompletionsThinkTooltip: 'Reasoning effort is max when on and medium when off',
   apiKeyEdit: 'Edit API Key',
   apiKeyPlaceholder: 'Enter API Key',
   apiKeyVerifying: 'Verifying...',

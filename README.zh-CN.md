@@ -33,6 +33,8 @@ pnpm build
 
 Chat Completions 模式会发送文本对话历史并流式显示回复。如果接口需要 API Key，请使用在服务端提供密钥的代理。跨域接口需要允许来自应用源的请求。
 
+开启深度思考时发送 `reasoning_effort: "max"`，关闭时发送 `reasoning_effort: "medium"`。所配置的接口和模型需支持对应的值。
+
 ## 功能
 
 - 多会话、自动标题、重命名与删除；编辑提问、重新生成和切换消息分支。

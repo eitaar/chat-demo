@@ -33,6 +33,8 @@ To use a Chat Completions-compatible endpoint, open **Settings → Data**, enter
 
 Chat Completions mode sends text conversation history and streams replies. If the endpoint requires an API key, use a proxy that supplies the key on the server. For an endpoint on another origin, allow requests from the app's origin.
 
+DeepThink sends `reasoning_effort: "max"` when on and `reasoning_effort: "medium"` when off. The configured endpoint and model must accept the selected value.
+
 ## Features
 
 - Multiple conversations with automatic titles, renaming, and deletion; edit prompts, regenerate replies, and switch between message branches.

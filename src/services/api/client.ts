@@ -211,12 +211,13 @@ export async function* streamChatCompletions(
   endpoint: string,
   model: string,
   messages: ChatCompletionMessage[],
+  reasoningEffort: 'medium' | 'max',
   signal: AbortSignal
 ): AsyncGenerator<MessageStreamEvent> {
   const response = await request(endpoint, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', Accept: 'text/event-stream' },
-    body: JSON.stringify({ model, messages, stream: true }),
+    body: JSON.stringify({ model, messages, stream: true, reasoning_effort: reasoningEffort }),
     signal,
   })
   const contentType = response.headers.get('Content-Type') ?? ''

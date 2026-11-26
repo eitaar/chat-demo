@@ -995,7 +995,7 @@ const waitForRetry = (attempt: number, signal: AbortSignal) =>
  */
 const streamReply = async (sessionId: string, initial: AssistantMessage, request: Request) => {
   const controller = new AbortController()
-  const { chatCompletions } = useSettings.getState()
+  const { chatCompletions, thinking } = useSettings.getState()
   if (!chatCompletions && !getSession(sessionId)?.title) {
     titleRequests.add(controller)
   }
@@ -1024,6 +1024,7 @@ const streamReply = async (sessionId: string, initial: AssistantMessage, request
             chatCompletions.endpoint,
             chatCompletions.model,
             toChatCompletionMessages(request.history, request.question),
+            thinking ? 'max' : 'medium',
             controller.signal
           )
         } else {
