@@ -31,6 +31,7 @@ import {
   setThemePreference,
   setTtsVoice,
   useSettings,
+  type ChatCompletionsSettings,
   type ThemePreference,
 } from '../../services/settings.js'
 import { useTranslate, type TranslationKey, type TranslationMessage } from '../../i18n/index.js'
@@ -145,24 +146,29 @@ const SettingsContent = ({
   )
 }
 
-type ModelRequest = { endpoint: string }
+type ModelRequest = Pick<ChatCompletionsSettings, 'endpoint' | 'apiKey'>
 
 const ChatCompletionsSetting = () => {
   const t = useTranslate()
   const config = useSettings((state) => state.chatCompletions)
   const [endpoint, setEndpoint] = useState(config?.endpoint ?? '')
+  const [apiKeyDraft, setApiKeyDraft] = useState('')
+  const [removeApiKey, setRemoveApiKey] = useState(false)
   const [selectedModel, setSelectedModel] = useState('')
   const [invalid, setInvalid] = useState(false)
   const [modelRequest, setModelRequest] = useState<ModelRequest | null>(() =>
-    config ? { endpoint: config.endpoint } : null
+    config ? { endpoint: config.endpoint, apiKey: config.apiKey } : null
   )
   const [modelResponse, setModelResponse] = useState<{
     request: ModelRequest
     models: string[] | null
   } | null>(null)
   const modelSelectId = useId()
+  const apiKeyInputId = useId()
   const validEndpoint = parseChatCompletionsEndpoint(endpoint)
   const savedModel = config && validEndpoint === config.endpoint ? config.model : ''
+  const savedApiKey = validEndpoint === config?.endpoint ? config.apiKey : undefined
+  const apiKey = apiKeyDraft.trim() || (removeApiKey ? undefined : savedApiKey)
   const response = modelResponse?.request === modelRequest ? modelResponse : null
   const loadingModels = modelRequest !== null && response === null
   const modelIds = response?.models ?? []
@@ -176,7 +182,7 @@ const ChatCompletionsSetting = () => {
     }
     const controller = new AbortController()
     const signal = controller.signal
-    void listChatCompletionsModels(modelRequest.endpoint, signal).then(
+    void listChatCompletionsModels(modelRequest, signal).then(
       (models) => {
         if (!signal.aborted) {
           setModelResponse({ request: modelRequest, models })
@@ -196,13 +202,15 @@ const ChatCompletionsSetting = () => {
       className={clsx(styles.cell, styles.apiKey)}
       onSubmit={(event) => {
         event.preventDefault()
-        const next = parseChatCompletionsSettings(endpoint, model)
+        const next = parseChatCompletionsSettings(endpoint, model, apiKey)
         if (endpoint.trim() && !next) {
           setInvalid(true)
           return
         }
         setInvalid(false)
         setEndpoint(next?.endpoint ?? '')
+        setApiKeyDraft('')
+        setRemoveApiKey(false)
         setChatCompletions(next)
       }}
     >
@@ -215,6 +223,8 @@ const ChatCompletionsSetting = () => {
             onChange={(event) => {
               const value = event.target.value
               if (value.trim() !== endpoint.trim()) {
+                setApiKeyDraft('')
+                setRemoveApiKey(false)
                 setSelectedModel('')
                 setModelRequest(null)
               }
@@ -226,6 +236,42 @@ const ChatCompletionsSetting = () => {
           />
         </span>
       </label>
+      <div>
+        <label className={styles.label} htmlFor={apiKeyInputId}>
+          {t('chatCompletionsApiKey')}
+        </label>
+        <div className={styles.apiKeyInput}>
+          <input
+            id={apiKeyInputId}
+            type="password"
+            autoComplete="off"
+            spellCheck={false}
+            disabled={!validEndpoint}
+            placeholder={t(
+              savedApiKey && !removeApiKey
+                ? 'chatCompletionsApiKeySaved'
+                : 'chatCompletionsApiKeyPlaceholder'
+            )}
+            value={apiKeyDraft}
+            onChange={(event) => setApiKeyDraft(event.target.value)}
+          />
+          {savedApiKey && !removeApiKey ? (
+            <>
+              <span className={styles.divider} />
+              <button
+                type="button"
+                className={styles.confirm}
+                onClick={() => {
+                  setApiKeyDraft('')
+                  setRemoveApiKey(true)
+                }}
+              >
+                {t('chatCompletionsApiKeyRemove')}
+              </button>
+            </>
+          ) : null}
+        </div>
+      </div>
       <div>
         <label className={styles.label} htmlFor={modelSelectId}>
           {t('chatCompletionsModel')}
@@ -256,7 +302,7 @@ const ChatCompletionsSetting = () => {
             disabled={!validEndpoint || loadingModels}
             onClick={() => {
               if (validEndpoint) {
-                setModelRequest({ endpoint: validEndpoint })
+                setModelRequest({ endpoint: validEndpoint, apiKey })
               }
             }}
           >
@@ -283,7 +329,11 @@ const ChatCompletionsSetting = () => {
         type="submit"
         variant="outlined"
         size="m"
-        disabled={endpoint === (config?.endpoint ?? '') && model === (config?.model ?? '')}
+        disabled={
+          endpoint === (config?.endpoint ?? '') &&
+          model === (config?.model ?? '') &&
+          apiKey === config?.apiKey
+        }
       >
         {t('chatCompletionsApply')}
       </Button>
