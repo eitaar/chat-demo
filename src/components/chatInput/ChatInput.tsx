@@ -24,6 +24,10 @@ import { stopReadAloud } from '../../services/speech/readAloud.js'
 import { IconButton } from '../base/IconButton.js'
 import { Tooltip } from '../base/Tooltip.js'
 import { preloadMarkdown } from '../markdown/Markdown.js'
+import {
+  CHAT_COMPLETION_FILE_ACCEPT,
+  validateChatCompletionFiles,
+} from '../../services/api/chatCompletionFiles.js'
 import { ensureApiKey, ensureChatConnection } from '../settings/settingsDialogState.js'
 import { DragMask, useFileDrop } from './DragMask.js'
 import { showToast } from '../base/toastState.js'
@@ -46,12 +50,14 @@ const Input = ({ sessionId }: { sessionId: string | null }) => {
   const draft = useDrafts((state) => state.drafts.get(sessionId) ?? EMPTY_DRAFT)
   const { text, attachments } = draft
   const setText = (value: string) => setDraftText(sessionId, value)
-  const draftReady = useUploads((state) => prepareDraftMessage(draft, state.tasks) !== null)
   const streaming = useChatStore(
     (state) => sessionId !== null && Object.hasOwn(state.streaming, sessionId)
   )
   const thinking = useSettings((state) => state.thinking)
   const chatCompletions = useSettings((state) => !!state.chatCompletions)
+  const draftReady = useUploads(
+    (state) => prepareDraftMessage(draft, state.tasks, chatCompletions) !== null
+  )
   const importingHistory = useChatStore((state) => state.importingHistory)
   const isMobile = useIsMobile()
   const showSearch = useSettings((state) => !state.chatCompletions || !!state.exaApiKey)
@@ -78,14 +84,15 @@ const Input = ({ sessionId }: { sessionId: string | null }) => {
   }, [t, showSearch])
 
   const acceptFiles = (files: File[]) => {
-    if (files.length > 0 && useSettings.getState().chatCompletions) {
-      showToast({ key: 'chatCompletionsTextOnly' })
+    if (files.length === 0 || useChatStore.getState().importingHistory || !ensureChatConnection()) {
       return
     }
-    if (files.length === 0 || useChatStore.getState().importingHistory || !ensureApiKey()) {
-      return
-    }
-    const error = addDraftFiles(sessionId, files, useSettings.getState().apiKey ?? '')
+    const settings = useSettings.getState()
+    const error = addDraftFiles(
+      sessionId,
+      files,
+      settings.chatCompletions ? null : (settings.apiKey ?? '')
+    )
     if (error) {
       showToast(error)
     }
@@ -142,23 +149,21 @@ const Input = ({ sessionId }: { sessionId: string | null }) => {
   const recording = voice.status === 'recording'
 
   // 排队、上传中或上传失败的附件都留在输入框，全部上传成功后才能发送
-  const canSend =
-    !importingHistory &&
-    !streaming &&
-    voice.status === 'idle' &&
-    draftReady &&
-    (!chatCompletions || attachments.length === 0)
+  const canSend = !importingHistory && !streaming && voice.status === 'idle' && draftReady
 
   const send = () => {
     const currentDraft = getDraft(sessionId)
-    if (useSettings.getState().chatCompletions && currentDraft.attachments.length > 0) {
-      showToast({ key: 'chatCompletionsTextOnly' })
+    const inline = !!useSettings.getState().chatCompletions
+    const fileError =
+      inline && validateChatCompletionFiles(currentDraft.attachments.map((item) => item.file))
+    if (fileError) {
+      showToast(fileError)
       return
     }
     if (
       useChatStore.getState().importingHistory ||
       voice.status !== 'idle' ||
-      !prepareDraftMessage(currentDraft, useUploads.getState().tasks)
+      !prepareDraftMessage(currentDraft, useUploads.getState().tasks, inline)
     ) {
       return
     }
@@ -186,6 +191,7 @@ const Input = ({ sessionId }: { sessionId: string | null }) => {
     >
       <DraftAttachments
         items={attachments}
+        inline={chatCompletions}
         onRetry={chatCompletions ? undefined : retryFile}
         onRemove={removeFile}
       />
@@ -260,41 +266,39 @@ const Input = ({ sessionId }: { sessionId: string | null }) => {
         </div>
         <div className={styles.right}>
           {chatCompletions ? null : (
-            <>
-              <VoiceButton
-                status={voice.status}
-                disabled={!voice.available}
-                seconds={voice.seconds}
-                onClick={() => {
-                  if (
-                    voice.status !== 'idle' ||
-                    (!useChatStore.getState().importingHistory && ensureApiKey())
-                  ) {
-                    void voice.toggle()
-                  }
-                }}
-              />
-              <IconButton
-                size="m"
-                tone="primary"
-                icon={<IconPaperclipOutline16 />}
-                tooltip={t('uploadFile')}
-                disabled={importingHistory}
-                onClick={() => ensureApiKey() && fileInputRef.current?.click()}
-              />
-              <input
-                ref={fileInputRef}
-                type="file"
-                multiple
-                hidden
-                accept={ACCEPT}
-                onChange={(event) => {
-                  acceptFiles(Array.from(event.target.files ?? []))
-                  event.target.value = ''
-                }}
-              />
-            </>
+            <VoiceButton
+              status={voice.status}
+              disabled={!voice.available}
+              seconds={voice.seconds}
+              onClick={() => {
+                if (
+                  voice.status !== 'idle' ||
+                  (!useChatStore.getState().importingHistory && ensureApiKey())
+                ) {
+                  void voice.toggle()
+                }
+              }}
+            />
           )}
+          <IconButton
+            size="m"
+            tone="primary"
+            icon={<IconPaperclipOutline16 />}
+            tooltip={t('uploadFile')}
+            disabled={importingHistory}
+            onClick={() => ensureChatConnection() && fileInputRef.current?.click()}
+          />
+          <input
+            ref={fileInputRef}
+            type="file"
+            multiple
+            hidden
+            accept={chatCompletions ? CHAT_COMPLETION_FILE_ACCEPT : ACCEPT}
+            onChange={(event) => {
+              acceptFiles(Array.from(event.target.files ?? []))
+              event.target.value = ''
+            }}
+          />
           {streaming && sessionId ? (
             <button
               type="button"
@@ -320,7 +324,7 @@ const Input = ({ sessionId }: { sessionId: string | null }) => {
           )}
         </div>
       </div>
-      {dragging && !chatCompletions ? <DragMask /> : null}
+      {dragging ? <DragMask inline={chatCompletions} /> : null}
     </div>
   )
 }

@@ -31,7 +31,9 @@ pnpm build
 
 在**设置 → 数据管理**中填写兼容接口的完整地址（例如同源路径 `/v1/chat/completions`）。点击**加载模型**，从列表中选择一个模型，再点击**应用**。模型列表来自对应的 `/models` 接口，例如 `/v1/models`。清空 Chat Completions 地址并应用即可切回 DeepSeek。
 
-Chat Completions 模式会发送文本对话历史并流式显示回复。如果接口需要 API Key，请使用在服务端提供密钥的代理。跨域接口需要允许来自应用源的请求。
+Chat Completions 模式会流式显示回复。如果接口需要 API Key，请使用在服务端提供密钥的代理。跨域接口需要允许来自应用源的请求。
+
+可以通过附件按钮、粘贴或拖拽添加 JPEG、PNG、GIF、WebP、PDF、Markdown、纯文本或 HTML。图片和 PDF 内联发送，要求接口和模型支持对应的 Chat Completions 内容类型。Markdown、纯文本和 HTML 按 UTF-8 读取并作为文本发送。原件保存在本地，每次请求在 32 MB 附件额度内携带可用的近期附件。
 
 开启深度思考时发送 `reasoning_effort: "max"`，关闭时发送 `reasoning_effort: "medium"`。所配置的接口和模型需支持对应的值。
 

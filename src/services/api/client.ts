@@ -217,7 +217,19 @@ export async function* streamMessage(
   throw new ApiError('interrupted', '')
 }
 
-export type ChatCompletionMessage = { role: 'user' | 'assistant'; content: string }
+export type ChatCompletionPart =
+  | { type: 'text'; text: string }
+  | { type: 'image_url'; image_url: { url: string } }
+  | { type: 'file'; file: { filename: string; file_data: string } }
+
+export type ChatCompletionUserMessage = {
+  role: 'user'
+  content: string | ChatCompletionPart[]
+}
+
+export type ChatCompletionMessage =
+  | ChatCompletionUserMessage
+  | { role: 'assistant'; content: string }
 
 const completionStopReason = (reason: string): StopReason => {
   switch (reason) {

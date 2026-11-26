@@ -557,9 +557,13 @@ export const sendMessage = (targetSessionId: string | null) => {
   if (get().importingHistory || !get().ready) {
     return false
   }
-  const prepared = prepareDraftMessage(getDraft(targetSessionId), useUploads.getState().tasks)
   const { chatCompletions } = useSettings.getState()
-  if (!prepared || (chatCompletions && prepared.files.length > 0)) {
+  const prepared = prepareDraftMessage(
+    getDraft(targetSessionId),
+    useUploads.getState().tasks,
+    !!chatCompletions
+  )
+  if (!prepared) {
     return false
   }
   const { text, files } = prepared
@@ -574,7 +578,9 @@ export const sendMessage = (targetSessionId: string | null) => {
   if (sessionId === null) {
     const session: Session = {
       id: createId(),
-      title: chatCompletions ? text.replace(/\s+/g, ' ').slice(0, 60) : '',
+      title: chatCompletions
+        ? (text || files[0]?.name || '').replace(/\s+/g, ' ').slice(0, 60)
+        : '',
       createdAt: now,
       updatedAt: now,
       messages: [],
@@ -601,7 +607,7 @@ export const sendMessage = (targetSessionId: string | null) => {
       id,
       serverId,
       // 草稿附件已上传成功，每张图片都在上传前检查过长边，超限的已缩小。
-      imageSizeChecked: isImage,
+      imageSizeChecked: isImage && serverId !== null,
       name,
       size,
       isImage,
@@ -621,6 +627,9 @@ export const sendMessage = (targetSessionId: string | null) => {
     ])
   }
   persist(sessionId)
+  if (chatCompletions) {
+    files.filter((file) => !file.serverId).forEach((file) => cancelUpload(file.id))
+  }
   clearSentDraft(targetSessionId)
   void streamReply(sessionId, reply, { history, question })
   return true
@@ -797,11 +806,18 @@ const saveServerIds = (sessionId: string, serverIds: ReadonlyMap<string, string 
   persist(sessionId)
 }
 
+const loadSessionFile = (sessionId: string, fileId: string) =>
+  pendingFiles.get(sessionId)?.find((file) => file.id === fileId)?.blob ?? db.loadFile(fileId)
+
 /**
  * 附件的服务端 id：已有直接用；正在上传的等待同一任务；否则读取本地原件补传。
  * 本地也没有原件（导入的文档附件只有元数据）时返回 null，该附件只展示、不进入请求。
  */
-const ensureServerId = async (apiKey: string, file: FileAttachment): Promise<string | null> => {
+const ensureServerId = async (
+  sessionId: string,
+  apiKey: string,
+  file: FileAttachment
+): Promise<string | null> => {
   if (file.serverId) {
     return file.serverId
   }
@@ -809,7 +825,7 @@ const ensureServerId = async (apiKey: string, file: FileAttachment): Promise<str
   if (task?.status === 'done') {
     return task.serverId
   }
-  const blob = await db.loadFile(file.id)
+  const blob = await loadSessionFile(sessionId, file.id)
   if (!blob) {
     return null
   }
@@ -861,7 +877,7 @@ const prepareFiles = async (sessionId: string, request: Request, signal: AbortSi
   }
   const uploads = Promise.allSettled(
     request.question.files.map(async (file) => {
-      const serverId = await ensureServerId(apiKey, file)
+      const serverId = await ensureServerId(sessionId, apiKey, file)
       if (serverId && serverId !== file.serverId) {
         serverIds.set(file.id, serverId)
       }
@@ -889,7 +905,7 @@ const prepareFiles = async (sessionId: string, request: Request, signal: AbortSi
   for (const file of pending.values()) {
     throwIfAborted(signal)
     try {
-      const serverId = await Promise.race([ensureServerId(apiKey, file), aborted])
+      const serverId = await Promise.race([ensureServerId(sessionId, apiKey, file), aborted])
       if (serverId) {
         serverIds.set(file.id, serverId)
         saveServerIds(sessionId, new Map([[file.id, serverId]]))
@@ -1018,10 +1034,7 @@ const streamReply = async (sessionId: string, initial: AssistantMessage, request
       try {
         let events
         if (chatCompletions) {
-          if (!request.question.content.trim() || request.question.files.length > 0) {
-            throw new ApiError('protocol', { key: 'chatCompletionsTextOnly' })
-          }
-          if (exaSearch && exaApiKey) {
+          if (exaSearch && exaApiKey && request.question.content.trim()) {
             const searchSources = await searchExa(
               exaApiKey,
               request.question.content,
@@ -1030,10 +1043,18 @@ const streamReply = async (sessionId: string, initial: AssistantMessage, request
             throwIfAborted(controller.signal)
             reply = { ...reply, searchSources }
           }
+          const messages = await toChatCompletionMessages(
+            request.history,
+            request.question,
+            reply.searchSources ?? [],
+            (id) => loadSessionFile(sessionId, id),
+            controller.signal
+          )
+          throwIfAborted(controller.signal)
           events = streamChatCompletions(
             chatCompletions.endpoint,
             chatCompletions.model,
-            toChatCompletionMessages(request.history, request.question, reply.searchSources),
+            messages,
             thinking ? 'max' : 'medium',
             controller.signal
           )
