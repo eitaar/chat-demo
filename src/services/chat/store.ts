@@ -4,6 +4,7 @@ import { createId } from '../../utils/id.js'
 import { ApiError, streamChatCompletions, streamMessage } from '../api/client.js'
 import type { ChatModel, CreateMessageRequest } from '../api/types.js'
 import { extractFileIds, getFileErrorCode, isRetryableApiError } from '../api/errors.js'
+import { searchExa } from '../api/exa.js'
 import {
   cancelUpload,
   checkImageFileIds,
@@ -995,7 +996,7 @@ const waitForRetry = (attempt: number, signal: AbortSignal) =>
  */
 const streamReply = async (sessionId: string, initial: AssistantMessage, request: Request) => {
   const controller = new AbortController()
-  const { chatCompletions, thinking } = useSettings.getState()
+  const { chatCompletions, thinking, exaApiKey, exaSearch } = useSettings.getState()
   if (!chatCompletions && !getSession(sessionId)?.title) {
     titleRequests.add(controller)
   }
@@ -1020,10 +1021,19 @@ const streamReply = async (sessionId: string, initial: AssistantMessage, request
           if (!request.question.content.trim() || request.question.files.length > 0) {
             throw new ApiError('protocol', { key: 'chatCompletionsTextOnly' })
           }
+          if (exaSearch && exaApiKey) {
+            const searchSources = await searchExa(
+              exaApiKey,
+              request.question.content,
+              controller.signal
+            )
+            throwIfAborted(controller.signal)
+            reply = { ...reply, searchSources }
+          }
           events = streamChatCompletions(
             chatCompletions.endpoint,
             chatCompletions.model,
-            toChatCompletionMessages(request.history, request.question),
+            toChatCompletionMessages(request.history, request.question, reply.searchSources),
             thinking ? 'max' : 'medium',
             controller.signal
           )

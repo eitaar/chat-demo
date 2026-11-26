@@ -195,6 +195,17 @@ export const buildReplyView = (reply: AssistantMessage, streaming: boolean): Rep
   let mergedThinking: ThinkingStep | null = null
   let pendingText: { index: number; text: string; citations?: TextCitation[] }[] = []
 
+  for (const { url, title, excerpt } of reply.searchSources ?? []) {
+    const source = registry.add(url, title, null, {
+      snippet: excerpt,
+      site_icon: null,
+      site_name: null,
+    })
+    if (source) {
+      searchResults.push(source)
+    }
+  }
+
   // 来源编号按搜索结果、打开的网页在回复中出现的顺序，与正文引用无关
   for (const block of reply.blocks) {
     if (block.type !== 'server_tool_use') {

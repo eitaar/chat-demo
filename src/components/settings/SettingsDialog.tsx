@@ -23,6 +23,7 @@ import {
   isChineseBrowser,
   parseChatCompletionsSettings,
   setChatCompletions,
+  setExaApiKey,
   setLocale,
   setLocation,
   setThemePreference,
@@ -113,7 +114,7 @@ const SettingsContent = ({
           ) : (
             <>
               <ChatCompletionsSetting />
-              {chatCompletions ? null : <ApiKeyField editor={apiKeyEditor} />}
+              {chatCompletions ? <ExaApiKeySetting /> : <ApiKeyField editor={apiKeyEditor} />}
               <ImportHistory historyImport={historyImport} disabled={historyBusy} />
               <ExportHistory disabled={historyBusy} />
               <SettingCell
@@ -202,6 +203,50 @@ const ChatCompletionsSetting = () => {
       >
         {t('chatCompletionsApply')}
       </Button>
+    </form>
+  )
+}
+
+const ExaApiKeySetting = () => {
+  const t = useTranslate()
+  const saved = useSettings((state) => !!state.exaApiKey)
+  const [value, setValue] = useState('')
+  const apiKey = value.trim()
+
+  return (
+    <form
+      className={clsx(styles.cell, styles.apiKey)}
+      onSubmit={(event) => {
+        event.preventDefault()
+        if (apiKey) {
+          setExaApiKey(apiKey)
+          setValue('')
+        }
+      }}
+    >
+      <label>
+        <span className={styles.label}>{t('exaApiKey')}</span>
+        <span className={styles.apiKeyInput}>
+          <input
+            type="password"
+            placeholder={t(saved ? 'exaKeySaved' : 'apiKeyPlaceholder')}
+            autoComplete="off"
+            spellCheck={false}
+            value={value}
+            onChange={(event) => setValue(event.target.value)}
+          />
+        </span>
+      </label>
+      <div className={styles.description}>{t('exaKeyDescription')}</div>
+      {apiKey ? (
+        <Button type="submit" variant="outlined" size="m">
+          {t('exaKeySave')}
+        </Button>
+      ) : saved ? (
+        <Button variant="outlined" size="m" onClick={() => setExaApiKey(null)}>
+          {t('exaKeyRemove')}
+        </Button>
+      ) : null}
     </form>
   )
 }

@@ -35,6 +35,8 @@ Chat Completions mode sends text conversation history and streams replies. If th
 
 DeepThink sends `reasoning_effort: "max"` when on and `reasoning_effort: "medium"` when off. The configured endpoint and model must accept the selected value.
 
+To use web search, save your own **Exa API Key** in **Settings → Data** while Chat Completions is active. Turn on **Search** to send the current question directly to Exa. The model receives the resulting titles, links and excerpts, and the reply shows the source list. The key is stored in your browser and sent only to Exa.
+
 ## Features
 
 - Multiple conversations with automatic titles, renaming, and deletion; edit prompts, regenerate replies, and switch between message branches.

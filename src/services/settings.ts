@@ -12,6 +12,8 @@ export type ChatCompletionsSettings = { endpoint: string; model: string }
 /** 本机设置，存 localStorage：API Key、语言、主题、位置、朗读音色、深度思考与智能搜索开关、侧边栏收起状态 */
 type Settings = {
   apiKey: string | null
+  exaApiKey: string | null
+  exaSearch: boolean
   chatCompletions: ChatCompletionsSettings | null
   locale: Locale
   themePreference: ThemePreference
@@ -24,6 +26,8 @@ type Settings = {
 
 const KEYS = {
   apiKey: 'chat-demo:api-key',
+  exaApiKey: 'chat-demo:exa-api-key',
+  exaSearch: 'chat-demo:exa-search',
   chatCompletions: 'chat-demo:chat-completions',
   locale: 'chat-demo:locale',
   location: 'chat-demo:location',
@@ -121,6 +125,8 @@ const initialChatCompletions = (): ChatCompletionsSettings | null => {
 
 export const useSettings = create<Settings>(() => ({
   apiKey: read(KEYS.apiKey),
+  exaApiKey: read(KEYS.exaApiKey),
+  exaSearch: read(KEYS.exaSearch) === 'true',
   chatCompletions: initialChatCompletions(),
   locale: initialLocale(),
   location: initialLocation(),
@@ -155,6 +161,21 @@ export const setTtsVoice = (ttsVoice: TtsVoice) => {
 export const setApiKey = (apiKey: string | null) => {
   write(KEYS.apiKey, apiKey)
   useSettings.setState({ apiKey })
+}
+
+export const setExaApiKey = (exaApiKey: string | null) => {
+  write(KEYS.exaApiKey, exaApiKey)
+  if (exaApiKey === null) {
+    write(KEYS.exaSearch, null)
+    useSettings.setState({ exaApiKey, exaSearch: false })
+  } else {
+    useSettings.setState({ exaApiKey })
+  }
+}
+
+export const setExaSearch = (exaSearch: boolean) => {
+  write(KEYS.exaSearch, String(exaSearch))
+  useSettings.setState({ exaSearch })
 }
 
 export const setChatCompletions = (chatCompletions: ChatCompletionsSettings | null) => {

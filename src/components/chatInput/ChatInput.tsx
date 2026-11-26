@@ -7,7 +7,7 @@ import {
   IconStopFill16,
   IconThinkOutline14,
 } from '../base/icons.js'
-import { setSearch, setThinking, useSettings } from '../../services/settings.js'
+import { setExaSearch, setSearch, setThinking, useSettings } from '../../services/settings.js'
 import { useIsMobile } from '../../app/viewport.js'
 import { sendMessage, stopReply, useChatStore } from '../../services/chat/store.js'
 import {
@@ -54,7 +54,8 @@ const Input = ({ sessionId }: { sessionId: string | null }) => {
   const chatCompletions = useSettings((state) => !!state.chatCompletions)
   const importingHistory = useChatStore((state) => state.importingHistory)
   const isMobile = useIsMobile()
-  const search = useSettings((state) => state.search)
+  const showSearch = useSettings((state) => !state.chatCompletions || !!state.exaApiKey)
+  const search = useSettings((state) => (state.chatCompletions ? state.exaSearch : state.search))
   const fileInputRef = useRef<HTMLInputElement>(null)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const togglesRef = useRef<HTMLDivElement>(null)
@@ -74,7 +75,7 @@ const Input = ({ sessionId }: { sessionId: string | null }) => {
     const observer = new ResizeObserver(updateLabels)
     observer.observe(toggles)
     return () => observer.disconnect()
-  }, [t, chatCompletions])
+  }, [t, showSearch])
 
   const acceptFiles = (files: File[]) => {
     if (files.length > 0 && useSettings.getState().chatCompletions) {
@@ -242,20 +243,20 @@ const Input = ({ sessionId }: { sessionId: string | null }) => {
               <span className={styles.toggleLabel}>{t('thinkingSwitch')}</span>
             </button>
           </Tooltip>
-          {chatCompletions ? null : (
-            <Tooltip content={t('deactivatedSearchTooltip')}>
+          {showSearch ? (
+            <Tooltip content={t(chatCompletions ? 'exaSearchTooltip' : 'deactivatedSearchTooltip')}>
               <button
                 type="button"
                 className={clsx(styles.toggle, search && styles.selected)}
                 aria-label={t('search')}
                 aria-pressed={search}
-                onClick={() => setSearch(!search)}
+                onClick={() => (chatCompletions ? setExaSearch : setSearch)(!search)}
               >
                 <IconGlobeLanguageOutline14 />
                 <span className={styles.toggleLabel}>{t('search')}</span>
               </button>
             </Tooltip>
-          )}
+          ) : null}
         </div>
         <div className={styles.right}>
           {chatCompletions ? null : (
