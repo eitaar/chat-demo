@@ -31,7 +31,7 @@ The output is written to `dist/`. Deploy it to a static web server or open `dist
 
 To use a Chat Completions-compatible endpoint, open **Settings → Data** and enter the full Chat Completions URL (for example, `/v1/chat/completions` on the same site). Click **Load models**, choose a model from the list and click **Apply**. The list comes from the matching `/models` endpoint, such as `/v1/models`. Clear the Chat Completions URL and apply to switch back to DeepSeek.
 
-Chat Completions mode streams replies. If the endpoint requires an API key, use a proxy that supplies the key on the server. For an endpoint on another origin, allow requests from the app's origin.
+For an endpoint that requires bearer authentication, enter its key in **Chat Completions API Key** before loading models. The browser saves the key with the configured endpoint when you click **Apply** and uses it for model listing and chat requests. For an endpoint on another origin, allow requests with the `Authorization` header from the app's origin.
 
 Attach JPEG, PNG, GIF, WebP, PDF, Markdown, plain text or HTML with the paperclip, paste or drag and drop. Images and PDFs are sent inline and require a model and endpoint that accept their corresponding Chat Completions content types. Markdown, text and HTML are read as UTF-8 and sent as text. The chat stores originals locally and includes available recent attachments within a 32 MB attachment budget per request.
 

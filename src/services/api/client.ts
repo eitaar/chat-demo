@@ -1,5 +1,6 @@
 import { translate, type TranslationMessage } from '../../i18n/index.js'
 import { resizeUploadImage } from '../../utils/resizeUploadImage.js'
+import type { ChatCompletionsSettings } from '../settings.js'
 import { readMessageEvent } from './parseEvent.js'
 import { readServerSentEvents } from './sse.js'
 import type {
@@ -100,8 +101,11 @@ export const verifyApiKey = async (apiKey: string, signal?: AbortSignal): Promis
   })
 }
 
+const bearerHeaders = (apiKey?: string): Record<string, string> =>
+  apiKey ? { Authorization: `Bearer ${apiKey}` } : {}
+
 export const listChatCompletionsModels = async (
-  endpoint: string,
+  { endpoint, apiKey }: Pick<ChatCompletionsSettings, 'endpoint' | 'apiKey'>,
   signal: AbortSignal
 ): Promise<string[]> => {
   const url = new URL(endpoint, window.location.href)
@@ -114,7 +118,7 @@ export const listChatCompletionsModels = async (
 
   const response = await request(url.href, {
     method: 'GET',
-    headers: { Accept: 'application/json' },
+    headers: { Accept: 'application/json', ...bearerHeaders(apiKey) },
     signal,
   })
   const payload = (await response.json()) as { data?: { id?: unknown }[] } | null
@@ -247,15 +251,18 @@ const completionStopReason = (reason: string): StopReason => {
 
 /** Adapt Chat Completions reasoning and text chunks to the shared reply events. */
 export async function* streamChatCompletions(
-  endpoint: string,
-  model: string,
+  { endpoint, model, apiKey }: ChatCompletionsSettings,
   messages: ChatCompletionMessage[],
   reasoningEffort: 'medium' | 'max',
   signal: AbortSignal
 ): AsyncGenerator<MessageStreamEvent> {
   const response = await request(endpoint, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json', Accept: 'text/event-stream' },
+    headers: {
+      'Content-Type': 'application/json',
+      Accept: 'text/event-stream',
+      ...bearerHeaders(apiKey),
+    },
     body: JSON.stringify({ model, messages, stream: true, reasoning_effort: reasoningEffort }),
     signal,
   })

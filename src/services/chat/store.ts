@@ -1052,8 +1052,7 @@ const streamReply = async (sessionId: string, initial: AssistantMessage, request
           )
           throwIfAborted(controller.signal)
           events = streamChatCompletions(
-            chatCompletions.endpoint,
-            chatCompletions.model,
+            chatCompletions,
             messages,
             thinking ? 'max' : 'medium',
             controller.signal

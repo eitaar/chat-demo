@@ -7,7 +7,7 @@ export type Locale = 'zh-CN' | 'en-US'
 /** 主题偏好；默认跟随系统 */
 export type ThemePreference = 'light' | 'dark' | 'system'
 
-export type ChatCompletionsSettings = { endpoint: string; model: string }
+export type ChatCompletionsSettings = { endpoint: string; model: string; apiKey?: string }
 
 /** 本机设置，存 localStorage：API Key、语言、主题、位置、朗读音色、深度思考与智能搜索开关、侧边栏收起状态 */
 type Settings = {
@@ -110,18 +110,26 @@ export const parseChatCompletionsEndpoint = (value: string): string | null => {
 
 export const parseChatCompletionsSettings = (
   endpoint: string,
-  model: string
+  model: string,
+  apiKey?: string
 ): ChatCompletionsSettings | null => {
   const parsedEndpoint = parseChatCompletionsEndpoint(endpoint)
   const modelId = model.trim()
-  return parsedEndpoint && modelId ? { endpoint: parsedEndpoint, model: modelId } : null
+  const key = apiKey?.trim()
+  return parsedEndpoint && modelId
+    ? { endpoint: parsedEndpoint, model: modelId, ...(key ? { apiKey: key } : {}) }
+    : null
 }
 
 const initialChatCompletions = (): ChatCompletionsSettings | null => {
   try {
     const saved = JSON.parse(read(KEYS.chatCompletions) ?? 'null')
     return typeof saved?.endpoint === 'string' && typeof saved.model === 'string'
-      ? parseChatCompletionsSettings(saved.endpoint, saved.model)
+      ? parseChatCompletionsSettings(
+          saved.endpoint,
+          saved.model,
+          typeof saved.apiKey === 'string' ? saved.apiKey : undefined
+        )
       : null
   } catch {
     return null
