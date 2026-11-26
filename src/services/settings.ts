@@ -95,21 +95,26 @@ const initialThemePreference = (): ThemePreference => {
 /** 未保存过时使用服务端默认音色 stella（海星） */
 const initialTtsVoice = (): TtsVoice => (read(KEYS.ttsVoice) === 'tide' ? 'tide' : 'stella')
 
-export const parseChatCompletionsSettings = (
-  endpoint: string,
-  model: string
-): ChatCompletionsSettings | null => {
-  endpoint = endpoint.trim()
-  model = model.trim()
-  if (!model || !/^(\/[^/]|https?:\/\/)/i.test(endpoint) || /[\t\r\n\\]/.test(endpoint)) {
+export const parseChatCompletionsEndpoint = (value: string): string | null => {
+  const endpoint = value.trim()
+  if (!/^(\/[^/]|https?:\/\/)/i.test(endpoint) || /[\t\r\n\\]/.test(endpoint)) {
     return null
   }
   try {
     const url = new URL(endpoint, 'https://localhost')
-    return url.username || url.password || url.hash ? null : { endpoint, model }
+    return url.username || url.password || url.hash ? null : endpoint
   } catch {
     return null
   }
+}
+
+export const parseChatCompletionsSettings = (
+  endpoint: string,
+  model: string
+): ChatCompletionsSettings | null => {
+  const parsedEndpoint = parseChatCompletionsEndpoint(endpoint)
+  const modelId = model.trim()
+  return parsedEndpoint && modelId ? { endpoint: parsedEndpoint, model: modelId } : null
 }
 
 const initialChatCompletions = (): ChatCompletionsSettings | null => {

@@ -29,7 +29,7 @@ The output is written to `dist/`. Deploy it to a static web server or open `dist
 
 ## Chat Completions
 
-To use a Chat Completions-compatible endpoint, open **Settings → Data**, enter the full Chat Completions URL (for example, `/v1/chat/completions` on the same site) and a model ID, then click **Apply**. Clear the URL and apply to switch back to DeepSeek.
+To use a Chat Completions-compatible endpoint, open **Settings → Data** and enter the full Chat Completions URL (for example, `/v1/chat/completions` on the same site). Click **Load models**, choose a model from the list and click **Apply**. The list comes from the matching `/models` endpoint, such as `/v1/models`. Clear the Chat Completions URL and apply to switch back to DeepSeek.
 
 Chat Completions mode sends text conversation history and streams replies. If the endpoint requires an API key, use a proxy that supplies the key on the server. For an endpoint on another origin, allow requests from the app's origin.
 

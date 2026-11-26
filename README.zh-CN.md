@@ -29,7 +29,7 @@ pnpm build
 
 ## Chat Completions
 
-在**设置 → 数据管理**中填写兼容接口的完整地址（例如同源路径 `/v1/chat/completions`）和模型 ID，再点击**应用**。清空地址并应用即可切回 DeepSeek。
+在**设置 → 数据管理**中填写兼容接口的完整地址（例如同源路径 `/v1/chat/completions`）。点击**加载模型**，从列表中选择一个模型，再点击**应用**。模型列表来自对应的 `/models` 接口，例如 `/v1/models`。清空 Chat Completions 地址并应用即可切回 DeepSeek。
 
 Chat Completions 模式会发送文本对话历史并流式显示回复。如果接口需要 API Key，请使用在服务端提供密钥的代理。跨域接口需要允许来自应用源的请求。
 

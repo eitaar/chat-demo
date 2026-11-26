@@ -100,6 +100,33 @@ export const verifyApiKey = async (apiKey: string, signal?: AbortSignal): Promis
   })
 }
 
+export const listChatCompletionsModels = async (
+  endpoint: string,
+  signal: AbortSignal
+): Promise<string[]> => {
+  const url = new URL(endpoint, window.location.href)
+  const path = url.pathname.replace(/\/+$/, '')
+  const chatPath = '/chat/completions'
+  const prefix = path.endsWith(chatPath)
+    ? path.slice(0, -chatPath.length)
+    : path.slice(0, path.lastIndexOf('/'))
+  url.pathname = `${prefix}/models`
+
+  const response = await request(url.href, {
+    method: 'GET',
+    headers: { Accept: 'application/json' },
+    signal,
+  })
+  const payload = (await response.json()) as { data?: { id?: unknown }[] } | null
+  if (!Array.isArray(payload?.data)) {
+    throw new ApiError('protocol', 'Expected a model list')
+  }
+  const modelIds = payload.data.flatMap((model) =>
+    typeof model?.id === 'string' && model.id.trim() ? [model.id.trim()] : []
+  )
+  return [...new Set(modelIds)]
+}
+
 /**
  * POST /anthropic/v1/files 上传附件（不设过期时间，会话里的历史附件一直可用）。
  * purpose 为 null 时不传该字段（图片）；purpose 必须排在 file 之前。
