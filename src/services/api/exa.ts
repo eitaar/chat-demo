@@ -1,7 +1,6 @@
 import { isWebUrl } from '../../utils/url.js'
 import { ApiError, request } from './client.js'
 
-const EXA_SEARCH_URL = 'https://api.exa.ai/search'
 const RESULT_LIMIT = 5
 const EXCERPT_LIMIT = 600
 
@@ -13,7 +12,7 @@ export const searchExa = async (
   signal: AbortSignal
 ): Promise<SearchSource[]> => {
   try {
-    const response = await request(EXA_SEARCH_URL, {
+    const response = await request(__EXA_SEARCH_URL__, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'x-api-key': apiKey },
       body: JSON.stringify({
