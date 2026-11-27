@@ -121,7 +121,7 @@ export const zh = {
   chatCompletionsDragFiles: '最多 {count} 个文件，总大小不超过 {size} MB',
   chatCompletionsInterrupted: 'Chat Completions 响应流意外中断。',
   chatCompletionsInvalidToolCall: '模型返回了无效的网页搜索请求。',
-  chatCompletionsSearchLimit: '模型在同一回复中请求了过多的网页搜索。',
+  chatCompletionsSearchLimit: '达到搜索上限后，模型仍尝试继续搜索。',
   chatCompletionsThinkTooltip: '开启时推理强度为 max，关闭时为 medium',
   exaApiKey: 'Exa API Key',
   exaKeySaved: '已保存 Exa API Key',
