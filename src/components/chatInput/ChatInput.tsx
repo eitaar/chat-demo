@@ -1,5 +1,5 @@
 import clsx from 'clsx'
-import { memo, useCallback, useEffect, useLayoutEffect, useRef } from 'react'
+import { memo, useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
 import {
   IconBoltOutline14,
   IconGlobeLanguageOutline14,
@@ -64,6 +64,7 @@ const Input = ({ sessionId }: { sessionId: string | null }) => {
   const chatCompletions = useSettings((state) => !!state.chatCompletions)
   const fastModel = useSettings((state) => state.chatCompletions?.fastModel)
   const fastMode = useSettings((state) => state.fastMode)
+  const [fastSweep, setFastSweep] = useState(false)
   const draftReady = useUploads(
     (state) => prepareDraftMessage(draft, state.tasks, chatCompletions) !== null
   )
@@ -192,6 +193,7 @@ const Input = ({ sessionId }: { sessionId: string | null }) => {
   return (
     <div
       className={clsx(styles.wrapper, sessionId === null ? styles.home : styles.session)}
+      data-fast-mode={fastModel && fastMode ? (fastSweep ? 'sweep' : 'on') : undefined}
       onClick={(event) => {
         if (event.target === event.currentTarget) {
           textareaRef.current?.focus({ preventScroll: true })
@@ -279,7 +281,10 @@ const Input = ({ sessionId }: { sessionId: string | null }) => {
                 className={clsx(styles.toggle, fastMode && styles.selected)}
                 aria-label={t('fastMode')}
                 aria-pressed={fastMode}
-                onClick={() => setFastMode(!fastMode)}
+                onClick={() => {
+                  setFastSweep(!fastMode)
+                  setFastMode(!fastMode)
+                }}
               >
                 <IconBoltOutline14 />
                 <span className={styles.toggleLabel}>{t('fastMode')}</span>
