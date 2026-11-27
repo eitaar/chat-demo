@@ -79,7 +79,7 @@ export const Sider = ({ mobile = false }: { mobile?: boolean }) => {
       <div className={styles.top}>
         <div className={styles.brand}>
           <img src="./brand.svg" alt="" width={24} height={24} />
-          <span className={styles.appName}>pshermes-instant</span>
+          <span className={styles.appName}>Ipsh</span>
         </div>
         <IconButton
           size="m"

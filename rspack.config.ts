@@ -90,6 +90,11 @@ export const createConfig = ({
       patterns: [
         { from: path.resolve(root, 'LICENSE'), to: 'LICENSE', toType: 'file' },
         { from: path.resolve(root, 'src/assets/brand.svg'), to: 'brand.svg', toType: 'file' },
+        {
+          from: path.resolve(root, 'src/assets/bricolage-grotesque-OFL.txt'),
+          to: 'licenses/bricolage-grotesque-OFL.txt',
+          toType: 'file',
+        },
       ],
     }),
   ],
