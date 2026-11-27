@@ -293,7 +293,7 @@ const WEB_SEARCH_TOOL = {
   },
 } as const
 
-const WEB_SEARCH_LIMIT = 4
+const WEB_SEARCH_LIMIT = 10
 const SEARCH_LIMIT_RESULT = JSON.stringify({
   error: 'Web search limit reached. Answer using the search results already available.',
 })
