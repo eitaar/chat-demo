@@ -8,6 +8,7 @@ declare const styles: {
   readonly "noticeAction": string;
   readonly "bottom": string;
   readonly "alwaysShow": string;
+  readonly "replySpeed": string;
   readonly "continueButton": string;
   readonly "summary": string;
   readonly "summaryActive": string;

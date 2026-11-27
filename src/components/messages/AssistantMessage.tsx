@@ -58,6 +58,7 @@ export const AssistantMessage = memo(function AssistantMessage({
   const copyText = responseText || notice?.text
   const waiting = streaming && view.steps.length === 0 && !view.answer && !message.thinking
   const summaryEntry = `${message.id}-summary`
+  const speed = message.status === 'done' && !refused ? message.speed : undefined
   return (
     <div className={styles.message}>
       {refused ? null : (
@@ -159,6 +160,16 @@ export const AssistantMessage = memo(function AssistantMessage({
               }}
             />
           </div>
+          {speed ? (
+            <span className={styles.replySpeed}>
+              <span title={t('replyTtftHint')}>TTFT {Math.round(speed.firstTokenMs)} ms</span>
+              {speed.tokensPerSecond === undefined ? null : (
+                <span title={t('replyTokenRateHint')}>
+                  {speed.tokensPerSecond.toFixed(1)} tok/s
+                </span>
+              )}
+            </span>
+          ) : null}
           {isLast && !chatCompletions && canContinueReply(message) ? (
             <Button
               variant="outlined"

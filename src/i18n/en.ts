@@ -32,6 +32,9 @@ export const en = {
   send: 'Send',
   editMessage: 'Edit message',
   regenerate: 'Regenerate',
+  replyTtftHint: 'Time from starting the request to receiving the first model output.',
+  replyTokenRateHint:
+    'Estimated output tokens per second from API usage and stream timing, including reasoning.',
   continueGenerating: 'Continue',
   changeApiKey: 'Change API Key',
   topUp: 'Top up',

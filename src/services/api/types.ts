@@ -213,6 +213,11 @@ export type ContentBlockDelta =
   | { type: 'citations_delta'; citation: TextCitation }
   | { type: 'input_json_delta'; partial_json: string }
 
+export type ReplySpeed = {
+  firstTokenMs: number
+  tokensPerSecond?: number
+}
+
 /** 流式事件：SSE 的 event 名与 JSON 的 type 相同，以 message_stop 结束，不发送 [DONE] */
 export type MessageStreamEvent =
   | {
@@ -234,7 +239,7 @@ export type MessageStreamEvent =
       }
       usage?: MessageUsage
     }
-  | { type: 'message_stop' }
+  | { type: 'message_stop'; speed?: ReplySpeed }
   | { type: 'ping' }
 
 /**

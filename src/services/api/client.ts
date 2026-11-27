@@ -341,17 +341,48 @@ export async function* streamChatCompletions(
   const conversation = [...messages]
   let remaining = WEB_SEARCH_LIMIT
   let index = 0
+  let includeUsage = true
+  const startedAt = performance.now()
+  let firstTokenAt: number | undefined
+  let generationMs = 0
+  let generatedTokens = 0
+  let hasFullUsage = true
   for (;;) {
     throwIfAborted(signal)
-    const turn = yield* streamChatCompletionTurn(
-      config,
-      conversation,
-      reasoningEffort,
-      signal,
-      index,
-      search ? (remaining > 0 ? 'auto' : 'none') : undefined
-    )
+    const { turn, timing, acceptsUsageOption }: ChatCompletionTurnResult =
+      yield* streamChatCompletionTurn(
+        config,
+        conversation,
+        reasoningEffort,
+        signal,
+        index,
+        includeUsage,
+        search ? (remaining > 0 ? 'auto' : 'none') : undefined
+      )
+    includeUsage = acceptsUsageOption
+    firstTokenAt ??= timing.firstTokenAt
+    if (timing.completionTokens === undefined) {
+      hasFullUsage = false
+    } else {
+      // The time between the first and last output excludes the first token's latency.
+      if (timing.completionTokens > 1 && timing.generationMs === 0) {
+        hasFullUsage = false
+      }
+      generatedTokens += Math.max(0, timing.completionTokens - 1)
+      generationMs += timing.generationMs
+    }
     if (!turn) {
+      const speed =
+        firstTokenAt === undefined
+          ? undefined
+          : {
+              firstTokenMs: firstTokenAt - startedAt,
+              tokensPerSecond:
+                hasFullUsage && generationMs > 0 && generatedTokens > 0
+                  ? (generatedTokens * 1000) / generationMs
+                  : undefined,
+            }
+      yield { type: 'message_stop', speed }
       return
     }
     const { nextIndex, content, reasoning, calls } = turn
@@ -386,6 +417,12 @@ type ChatCompletionToolTurn = {
   calls: ChatCompletionToolCall[]
 }
 
+type ChatCompletionTurnResult = {
+  turn?: ChatCompletionToolTurn
+  timing: { firstTokenAt?: number; generationMs: number; completionTokens?: number }
+  acceptsUsageOption: boolean
+}
+
 /** Adapt a single response's streamed reasoning and text to the shared reply events. */
 async function* streamChatCompletionTurn(
   { endpoint, model, apiKey }: ChatCompletionsSettings,
@@ -393,24 +430,45 @@ async function* streamChatCompletionTurn(
   reasoningEffort: 'medium' | 'max',
   signal: AbortSignal,
   startIndex: number,
+  includeUsage: boolean,
   toolChoice?: 'auto' | 'none'
-): AsyncGenerator<MessageStreamEvent, ChatCompletionToolTurn | undefined> {
-  const response = await request(endpoint, {
+): AsyncGenerator<MessageStreamEvent, ChatCompletionTurnResult> {
+  const body = {
+    model,
+    messages,
+    stream: true,
+    reasoning_effort: reasoningEffort,
+    ...(toolChoice ? { tools: [WEB_SEARCH_TOOL], tool_choice: toolChoice } : {}),
+  }
+  const init = {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
       Accept: 'text/event-stream',
       ...bearerHeaders(apiKey),
     },
-    body: JSON.stringify({
-      model,
-      messages,
-      stream: true,
-      reasoning_effort: reasoningEffort,
-      ...(toolChoice ? { tools: [WEB_SEARCH_TOOL], tool_choice: toolChoice } : {}),
-    }),
     signal,
-  })
+  }
+  let response: Response
+  try {
+    response = await request(endpoint, {
+      ...init,
+      body: JSON.stringify(
+        includeUsage ? { ...body, stream_options: { include_usage: true } } : body
+      ),
+    })
+  } catch (error) {
+    if (
+      !includeUsage ||
+      !(error instanceof ApiError) ||
+      (error.status !== 400 && error.status !== 422) ||
+      !/\b(?:stream_options|include_usage)\b/i.test(error.message)
+    ) {
+      throw error
+    }
+    includeUsage = false
+    response = await request(endpoint, { ...init, body: JSON.stringify(body) })
+  }
   const contentType = response.headers.get('Content-Type') ?? ''
   if (!response.body || !contentType.includes('text/event-stream')) {
     throw await readErrorResponse(response, 'protocol', 'Expected a text/event-stream response')
@@ -421,27 +479,39 @@ async function* streamChatCompletionTurn(
   let content = ''
   let reasoning = ''
   let toolTurn = false
+  let firstTokenAt: number | undefined
+  let lastTokenAt: number | undefined
+  let completionTokens: number | undefined
   const toolCalls = new Map<number, ChatCompletionToolCall>()
   for await (const { event, data } of readServerSentEvents(response.body, signal)) {
     if (data === '[DONE]') {
       if (blockType) {
         yield { type: 'content_block_stop', index }
       }
+      const timing = {
+        firstTokenAt,
+        generationMs: firstTokenAt === undefined ? 0 : (lastTokenAt ?? firstTokenAt) - firstTokenAt,
+        completionTokens,
+      }
       if (toolTurn || toolCalls.size > 0) {
         if (!toolTurn || toolCalls.size === 0) {
           throw invalidToolCall()
         }
         const calls = [...toolCalls.entries()].sort(([a], [b]) => a - b).map(([, call]) => call)
-        return { nextIndex: index + 1, content, reasoning, calls }
+        return {
+          turn: { nextIndex: index + 1, content, reasoning, calls },
+          timing,
+          acceptsUsageOption: includeUsage,
+        }
       }
-      yield { type: 'message_stop' }
-      return undefined
+      return { timing, acceptsUsageOption: includeUsage }
     }
     let chunk: {
       choices?: {
         delta?: ChatCompletionDelta
         finish_reason?: string | null
       }[]
+      usage?: { completion_tokens?: number } | null
     } | null
     try {
       chunk = JSON.parse(data)
@@ -454,6 +524,25 @@ async function* streamChatCompletionTurn(
 
     const choice = chunk?.choices?.[0]
     const calls = choice?.delta?.tool_calls
+    const outputTokens = chunk?.usage?.completion_tokens
+    if (
+      typeof outputTokens === 'number' &&
+      Number.isSafeInteger(outputTokens) &&
+      outputTokens >= 0
+    ) {
+      completionTokens = outputTokens
+    }
+    const reasoningDelta = getReasoningDelta(choice?.delta)
+    const textDelta = choice?.delta?.content
+    if (
+      reasoningDelta ||
+      (typeof textDelta === 'string' && textDelta) ||
+      (Array.isArray(calls) &&
+        calls.some((part) => part?.function?.name || part?.function?.arguments))
+    ) {
+      lastTokenAt = performance.now()
+      firstTokenAt ??= lastTokenAt
+    }
     if (Array.isArray(calls)) {
       for (const part of calls) {
         if (!Number.isSafeInteger(part?.index) || part.index < 0) {
@@ -471,8 +560,8 @@ async function* streamChatCompletionTurn(
       }
     }
     const fragments = [
-      ['thinking', getReasoningDelta(choice?.delta)],
-      ['text', choice?.delta?.content],
+      ['thinking', reasoningDelta],
+      ['text', textDelta],
     ] as const
     for (const [type, fragment] of fragments) {
       if (typeof fragment !== 'string' || !fragment) {

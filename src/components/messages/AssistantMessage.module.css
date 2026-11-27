@@ -104,6 +104,16 @@
   opacity: 1;
 }
 
+.replySpeed {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 2px 8px;
+  color: var(--dsw-alias-label-secondary);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  line-height: 16px;
+}
+
 .continueButton {
   margin-left: auto;
 }
