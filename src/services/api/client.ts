@@ -294,6 +294,9 @@ const WEB_SEARCH_TOOL = {
 } as const
 
 const WEB_SEARCH_LIMIT = 4
+const SEARCH_LIMIT_RESULT = JSON.stringify({
+  error: 'Web search limit reached. Answer using the search results already available.',
+})
 
 const invalidToolCall = () => new ApiError('protocol', { key: 'chatCompletionsInvalidToolCall' })
 
@@ -356,7 +359,7 @@ export async function* streamChatCompletions(
     if (!search || new Set(calls.map((call) => call.id)).size !== calls.length) {
       throw invalidToolCall()
     }
-    if (calls.length > remaining) {
+    if (remaining === 0) {
       throw new ApiError('protocol', { key: 'chatCompletionsSearchLimit' })
     }
     conversation.push({
@@ -367,10 +370,11 @@ export async function* streamChatCompletions(
     })
     for (const [callIndex, call] of calls.entries()) {
       throwIfAborted(signal)
-      const result = await search(queries[callIndex])
+      // The provider expects one tool result for every call ID, including skipped searches.
+      const result = callIndex < remaining ? await search(queries[callIndex]) : SEARCH_LIMIT_RESULT
       conversation.push({ role: 'tool', tool_call_id: call.id, content: result })
     }
-    remaining -= calls.length
+    remaining = Math.max(0, remaining - calls.length)
     index = nextIndex
   }
 }
