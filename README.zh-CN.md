@@ -37,6 +37,8 @@ pnpm build
 
 开启深度思考时发送 `reasoning_effort: "max"`，关闭时发送 `reasoning_effort: "medium"`。所配置的接口和模型需支持对应的值。
 
+可以在**设置 → 数据管理**中从同一模型列表选择**快速模式模型**。开启输入栏的**快速**开关后，新消息和重新生成的回复会使用该模型，并沿用当前接口和 API Key。开关状态保存在浏览器中。
+
 如果接口流式返回推理文本，应用会将其显示在回答上方的可折叠思考区域，支持 `delta.reasoning_content`、`delta.reasoning` 和 `delta.reasoning_details` 中的文本条目。
 
 使用网页搜索时，请在**设置 → 数据管理**中保存自己的 **Exa API Key**，并选择支持函数调用的 Chat Completions 模型。打开**搜索**后，模型可按需调用网页搜索。应用将模型生成的搜索词发给 Exa，把结果返回给模型，并在回复中展示来源。

@@ -37,6 +37,8 @@ Attach JPEG, PNG, GIF, WebP, PDF, Markdown, plain text or HTML with the papercli
 
 DeepThink sends `reasoning_effort: "max"` when on and `reasoning_effort: "medium"` when off. The configured endpoint and model must accept the selected value.
 
+Optionally select a **Fast model** in **Settings → Data** from the same model list. The **Fast** button switches the model for new messages and regenerated replies on the same endpoint and API key. The toggle is saved in the browser.
+
 Endpoints that stream reasoning text show it in the collapsible thinking panel above the answer. The app reads `delta.reasoning_content`, `delta.reasoning`, or text entries in `delta.reasoning_details`.
 
 To use web search, save your own **Exa API Key** in **Settings → Data** and select a Chat Completions model that supports function calling. Turn on **Search** to let the model request a web search when needed. The app sends the model's search query to Exa, passes the results back to the model, and displays the sources with the reply.

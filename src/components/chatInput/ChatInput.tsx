@@ -1,13 +1,20 @@
 import clsx from 'clsx'
 import { memo, useCallback, useEffect, useLayoutEffect, useRef } from 'react'
 import {
+  IconBoltOutline14,
   IconGlobeLanguageOutline14,
   IconPaperclipOutline16,
   IconSendOutline16,
   IconStopFill16,
   IconThinkOutline14,
 } from '../base/icons.js'
-import { setExaSearch, setSearch, setThinking, useSettings } from '../../services/settings.js'
+import {
+  setExaSearch,
+  setFastMode,
+  setSearch,
+  setThinking,
+  useSettings,
+} from '../../services/settings.js'
 import { useIsMobile } from '../../app/viewport.js'
 import { sendMessage, stopReply, useChatStore } from '../../services/chat/store.js'
 import {
@@ -55,6 +62,8 @@ const Input = ({ sessionId }: { sessionId: string | null }) => {
   )
   const thinking = useSettings((state) => state.thinking)
   const chatCompletions = useSettings((state) => !!state.chatCompletions)
+  const fastModel = useSettings((state) => state.chatCompletions?.fastModel)
+  const fastMode = useSettings((state) => state.fastMode)
   const draftReady = useUploads(
     (state) => prepareDraftMessage(draft, state.tasks, chatCompletions) !== null
   )
@@ -81,7 +90,7 @@ const Input = ({ sessionId }: { sessionId: string | null }) => {
     const observer = new ResizeObserver(updateLabels)
     observer.observe(toggles)
     return () => observer.disconnect()
-  }, [t, showSearch])
+  }, [t, showSearch, fastModel])
 
   const acceptFiles = (files: File[]) => {
     if (files.length === 0 || useChatStore.getState().importingHistory || !ensureChatConnection()) {
@@ -260,6 +269,20 @@ const Input = ({ sessionId }: { sessionId: string | null }) => {
               >
                 <IconGlobeLanguageOutline14 />
                 <span className={styles.toggleLabel}>{t('search')}</span>
+              </button>
+            </Tooltip>
+          ) : null}
+          {fastModel ? (
+            <Tooltip content={t('fastModeTooltip', { model: fastModel })}>
+              <button
+                type="button"
+                className={clsx(styles.toggle, fastMode && styles.selected)}
+                aria-label={t('fastMode')}
+                aria-pressed={fastMode}
+                onClick={() => setFastMode(!fastMode)}
+              >
+                <IconBoltOutline14 />
+                <span className={styles.toggleLabel}>{t('fastMode')}</span>
               </button>
             </Tooltip>
           ) : null}

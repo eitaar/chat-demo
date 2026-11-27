@@ -1,5 +1,16 @@
 import { useId } from 'react'
 
+export const IconBoltOutline14 = () => (
+  <svg width={14} height={14} viewBox="0 0 14 14" fill="none" aria-hidden="true">
+    <path
+      d="M8 1.5 3 8h3.5L6 12.5 11 6H7.5L8 1.5Z"
+      stroke="currentColor"
+      strokeWidth={1.2}
+      strokeLinejoin="round"
+    />
+  </svg>
+)
+
 export const IconCheckOutline16 = () => (
   <svg width={16} height={16} viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
     <path
