@@ -254,6 +254,30 @@ type ChatCompletionToolDelta = {
   function?: { name?: string | null; arguments?: string | null }
 }
 
+type ChatCompletionDelta = {
+  content?: string | null
+  reasoning_content?: string | null
+  reasoning?: string | null
+  reasoning_details?: { type?: string; text?: string }[] | null
+  tool_calls?: ChatCompletionToolDelta[] | null
+}
+
+const getReasoningDelta = (delta?: ChatCompletionDelta): string => {
+  // Some providers put the same text in both reasoning and reasoning_details.
+  for (const value of [delta?.reasoning_content, delta?.reasoning]) {
+    if (typeof value === 'string' && value) {
+      return value
+    }
+  }
+  const details = delta?.reasoning_details
+  return Array.isArray(details)
+    ? details
+        .filter((detail) => detail?.type === 'reasoning.text' && typeof detail.text === 'string')
+        .map((detail) => detail.text)
+        .join('')
+    : ''
+}
+
 const WEB_SEARCH_TOOL = {
   type: 'function',
   function: {
@@ -411,11 +435,7 @@ async function* streamChatCompletionTurn(
     }
     let chunk: {
       choices?: {
-        delta?: {
-          content?: string | null
-          reasoning_content?: string | null
-          tool_calls?: ChatCompletionToolDelta[] | null
-        }
+        delta?: ChatCompletionDelta
         finish_reason?: string | null
       }[]
     } | null
@@ -447,7 +467,7 @@ async function* streamChatCompletionTurn(
       }
     }
     const fragments = [
-      ['thinking', choice?.delta?.reasoning_content],
+      ['thinking', getReasoningDelta(choice?.delta)],
       ['text', choice?.delta?.content],
     ] as const
     for (const [type, fragment] of fragments) {
