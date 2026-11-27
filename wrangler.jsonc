@@ -1,0 +1,16 @@
+{
+  "$schema": "https://unpkg.com/wrangler@4.168.0/config-schema.json",
+  "name": "chat-demo",
+  "main": "cloudflare/worker.js",
+  "compatibility_date": "2026-11-23",
+  "assets": {
+    "directory": "./dist",
+    "binding": "ASSETS",
+    "run_worker_first": ["/api/exa/search"],
+  },
+  "observability": {
+    "enabled": true,
+    "logs": { "enabled": true },
+    "traces": { "enabled": true },
+  },
+}

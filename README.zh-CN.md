@@ -39,7 +39,9 @@ pnpm build
 
 如果接口以 DeepSeek 兼容格式流式返回 `delta.reasoning_content`，推理内容会显示在回答上方的可折叠思考区域。
 
-使用网页搜索时，请在**设置 → 数据管理**中保存自己的 **Exa API Key**，并选择支持函数调用的 Chat Completions 模型。打开**搜索**后，模型可按需调用网页搜索。浏览器将模型生成的搜索词发给 Exa，把结果返回给模型，并在回复中展示来源。密钥保存在当前浏览器，仅发送给 Exa。
+使用网页搜索时，请在**设置 → 数据管理**中保存自己的 **Exa API Key**，并选择支持函数调用的 Chat Completions 模型。打开**搜索**后，模型可按需调用网页搜索。应用将模型生成的搜索词发给 Exa，把结果返回给模型，并在回复中展示来源。
+
+部署到 Cloudflare Workers 时，浏览器通过站点的 `/api/exa/search` 接口将密钥和搜索词转发给 Exa。Worker 仅在当次请求中使用密钥，不会保存。Workers Builds 会自动设置 `WORKERS_CI=1`，构建和部署命令仍为 `pnpm run build` 和 `npx wrangler deploy`。手动构建 Workers 版本时也需设置 `WORKERS_CI=1`。普通静态构建会直接请求 Exa，需要 Exa 的响应允许跨域访问。
 
 ## 功能
 

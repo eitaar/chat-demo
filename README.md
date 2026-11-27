@@ -39,7 +39,9 @@ DeepThink sends `reasoning_effort: "max"` when on and `reasoning_effort: "medium
 
 Endpoints that stream DeepSeek-style `delta.reasoning_content` show that text in the collapsible thinking panel above the answer.
 
-To use web search, save your own **Exa API Key** in **Settings → Data** and select a Chat Completions model that supports function calling. Turn on **Search** to let the model request a web search when needed. The browser sends the model's search query to Exa, passes the results back to the model, and displays the sources with the reply. The key is stored in your browser and sent only to Exa.
+To use web search, save your own **Exa API Key** in **Settings → Data** and select a Chat Completions model that supports function calling. Turn on **Search** to let the model request a web search when needed. The app sends the model's search query to Exa, passes the results back to the model, and displays the sources with the reply.
+
+On Cloudflare Workers, the browser sends the key and query through the site's `/api/exa/search` endpoint, which forwards them to Exa. The Worker uses the key for that request and does not store it. Workers Builds sets `WORKERS_CI=1` automatically, so the build and deploy commands remain `pnpm run build` and `npx wrangler deploy`. Set `WORKERS_CI=1` for a manual Workers build as well. Plain static builds send directly to Exa and require an Exa response that permits cross-origin access.
 
 ## Features
 
