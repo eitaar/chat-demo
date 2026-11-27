@@ -28,6 +28,8 @@ export const zh = {
   send: '发送',
   editMessage: '编辑消息',
   regenerate: '重新生成',
+  replyTtftHint: '从发起请求到收到模型首段输出的时间。',
+  replyTokenRateHint: '根据接口用量和流式响应时间估算的每秒输出令牌数，包含推理。',
   continueGenerating: '继续生成',
   changeApiKey: '更换 API Key',
   topUp: '前往充值',

@@ -145,6 +145,8 @@ export const applyEvent = (
         stopDetails: event.delta.stop_details,
         usage: event.usage ?? next.usage,
       }
+    case 'message_stop':
+      return event.speed ? { ...next, speed: event.speed } : next
     default:
       return next
   }

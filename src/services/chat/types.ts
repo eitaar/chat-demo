@@ -4,6 +4,7 @@ import type { SearchSource } from '../api/exa.js'
 import type {
   ChatModel,
   MessageUsage,
+  ReplySpeed,
   ServerToolBlock,
   StopDetails,
   StopReason,
@@ -97,6 +98,7 @@ export type AssistantMessage = MessageBranch & {
   stopDetails?: StopDetails
   /** 最近一次请求的用量，续写后更新 */
   usage?: MessageUsage
+  speed?: ReplySpeed
   error?: {
     /** upload：发送前补传附件失败，请求没有发出 */
     kind: ApiErrorKind | 'upload'
