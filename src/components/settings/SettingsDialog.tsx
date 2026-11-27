@@ -155,6 +155,7 @@ const ChatCompletionsSetting = () => {
   const [apiKeyDraft, setApiKeyDraft] = useState('')
   const [removeApiKey, setRemoveApiKey] = useState(false)
   const [selectedModel, setSelectedModel] = useState('')
+  const [selectedFastModel, setSelectedFastModel] = useState<string>()
   const [invalid, setInvalid] = useState(false)
   const [modelRequest, setModelRequest] = useState<ModelRequest | null>(() =>
     config ? { endpoint: config.endpoint, apiKey: config.apiKey } : null
@@ -164,17 +165,23 @@ const ChatCompletionsSetting = () => {
     models: string[] | null
   } | null>(null)
   const modelSelectId = useId()
+  const fastModelSelectId = useId()
   const apiKeyInputId = useId()
   const validEndpoint = parseChatCompletionsEndpoint(endpoint)
   const savedModel = config && validEndpoint === config.endpoint ? config.model : ''
+  const savedFastModel = validEndpoint === config?.endpoint ? (config.fastModel ?? '') : ''
   const savedApiKey = validEndpoint === config?.endpoint ? config.apiKey : undefined
   const apiKey = apiKeyDraft.trim() || (removeApiKey ? undefined : savedApiKey)
   const response = modelResponse?.request === modelRequest ? modelResponse : null
   const loadingModels = modelRequest !== null && response === null
   const modelIds = response?.models ?? []
-  const options =
-    savedModel && !modelIds.includes(savedModel) ? [savedModel, ...modelIds] : modelIds
+  const savedOptions = [savedModel, savedFastModel].filter((id) => id && !modelIds.includes(id))
+  const options = [...new Set([...savedOptions, ...modelIds])]
   const model = options.includes(selectedModel) ? selectedModel : savedModel
+  const fastModel =
+    selectedFastModel === '' || (selectedFastModel && options.includes(selectedFastModel))
+      ? selectedFastModel
+      : savedFastModel
 
   useEffect(() => {
     if (!modelRequest) {
@@ -202,7 +209,7 @@ const ChatCompletionsSetting = () => {
       className={clsx(styles.cell, styles.apiKey)}
       onSubmit={(event) => {
         event.preventDefault()
-        const next = parseChatCompletionsSettings(endpoint, model, apiKey)
+        const next = parseChatCompletionsSettings(endpoint, model, apiKey, fastModel)
         if (endpoint.trim() && !next) {
           setInvalid(true)
           return
@@ -211,6 +218,7 @@ const ChatCompletionsSetting = () => {
         setEndpoint(next?.endpoint ?? '')
         setApiKeyDraft('')
         setRemoveApiKey(false)
+        setSelectedFastModel(undefined)
         setChatCompletions(next)
       }}
     >
@@ -226,6 +234,7 @@ const ChatCompletionsSetting = () => {
                 setApiKeyDraft('')
                 setRemoveApiKey(false)
                 setSelectedModel('')
+                setSelectedFastModel(undefined)
                 setModelRequest(null)
               }
               setInvalid(false)
@@ -310,6 +319,26 @@ const ChatCompletionsSetting = () => {
           </button>
         </div>
       </div>
+      <div>
+        <label className={styles.label} htmlFor={fastModelSelectId}>
+          {t('chatCompletionsFastModel')}
+        </label>
+        <div className={styles.apiKeyInput}>
+          <select
+            id={fastModelSelectId}
+            value={fastModel}
+            disabled={options.length === 0}
+            onChange={(event) => setSelectedFastModel(event.target.value)}
+          >
+            <option value="">{t('chatCompletionsFastModelNone')}</option>
+            {options.map((id) => (
+              <option key={id} value={id}>
+                {id}
+              </option>
+            ))}
+          </select>
+        </div>
+      </div>
       {response?.models === null ? (
         <div role="alert" className={styles.error}>
           {t('chatCompletionsModelsError')}
@@ -332,6 +361,7 @@ const ChatCompletionsSetting = () => {
         disabled={
           endpoint === (config?.endpoint ?? '') &&
           model === (config?.model ?? '') &&
+          fastModel === (config?.fastModel ?? '') &&
           apiKey === config?.apiKey
         }
       >

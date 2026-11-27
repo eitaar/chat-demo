@@ -7,7 +7,12 @@ export type Locale = 'zh-CN' | 'en-US'
 /** 主题偏好；默认跟随系统 */
 export type ThemePreference = 'light' | 'dark' | 'system'
 
-export type ChatCompletionsSettings = { endpoint: string; model: string; apiKey?: string }
+export type ChatCompletionsSettings = {
+  endpoint: string
+  model: string
+  apiKey?: string
+  fastModel?: string
+}
 
 /** 本机设置，存 localStorage：API Key、语言、主题、位置、朗读音色、深度思考与智能搜索开关、侧边栏收起状态 */
 type Settings = {
@@ -15,6 +20,7 @@ type Settings = {
   exaApiKey: string | null
   exaSearch: boolean
   chatCompletions: ChatCompletionsSettings | null
+  fastMode: boolean
   locale: Locale
   themePreference: ThemePreference
   location: UserLocation | null
@@ -29,6 +35,7 @@ const KEYS = {
   exaApiKey: 'chat-demo:exa-api-key',
   exaSearch: 'chat-demo:exa-search',
   chatCompletions: 'chat-demo:chat-completions',
+  fastMode: 'chat-demo:fast-mode',
   locale: 'chat-demo:locale',
   location: 'chat-demo:location',
   themePreference: 'chat-demo:theme-preference',
@@ -111,13 +118,20 @@ export const parseChatCompletionsEndpoint = (value: string): string | null => {
 export const parseChatCompletionsSettings = (
   endpoint: string,
   model: string,
-  apiKey?: string
+  apiKey?: string,
+  fastModel?: string
 ): ChatCompletionsSettings | null => {
   const parsedEndpoint = parseChatCompletionsEndpoint(endpoint)
   const modelId = model.trim()
   const key = apiKey?.trim()
+  const fastModelId = fastModel?.trim()
   return parsedEndpoint && modelId
-    ? { endpoint: parsedEndpoint, model: modelId, ...(key ? { apiKey: key } : {}) }
+    ? {
+        endpoint: parsedEndpoint,
+        model: modelId,
+        ...(key ? { apiKey: key } : {}),
+        ...(fastModelId ? { fastModel: fastModelId } : {}),
+      }
     : null
 }
 
@@ -128,7 +142,8 @@ const initialChatCompletions = (): ChatCompletionsSettings | null => {
       ? parseChatCompletionsSettings(
           saved.endpoint,
           saved.model,
-          typeof saved.apiKey === 'string' ? saved.apiKey : undefined
+          typeof saved.apiKey === 'string' ? saved.apiKey : undefined,
+          typeof saved.fastModel === 'string' ? saved.fastModel : undefined
         )
       : null
   } catch {
@@ -141,6 +156,7 @@ export const useSettings = create<Settings>(() => ({
   exaApiKey: read(KEYS.exaApiKey),
   exaSearch: read(KEYS.exaSearch) === 'true',
   chatCompletions: initialChatCompletions(),
+  fastMode: read(KEYS.fastMode) === 'true',
   locale: initialLocale(),
   location: initialLocation(),
   themePreference: initialThemePreference(),
@@ -193,7 +209,20 @@ export const setExaSearch = (exaSearch: boolean) => {
 
 export const setChatCompletions = (chatCompletions: ChatCompletionsSettings | null) => {
   write(KEYS.chatCompletions, chatCompletions ? JSON.stringify(chatCompletions) : null)
+  if (
+    !chatCompletions?.fastModel ||
+    chatCompletions.endpoint !== useSettings.getState().chatCompletions?.endpoint
+  ) {
+    write(KEYS.fastMode, null)
+    useSettings.setState({ chatCompletions, fastMode: false })
+    return
+  }
   useSettings.setState({ chatCompletions })
+}
+
+export const setFastMode = (fastMode: boolean) => {
+  write(KEYS.fastMode, String(fastMode))
+  useSettings.setState({ fastMode })
 }
 
 export const setThinking = (thinking: boolean) => {
