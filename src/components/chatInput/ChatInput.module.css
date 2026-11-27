@@ -348,6 +348,17 @@
   margin-left: auto;
 }
 
+.fastButton[aria-pressed='true'] {
+  color: var(--dsw-alias-brand-text);
+  background-color: var(--dsw-alias-button-ghost-active-fill);
+
+  @media (hover: hover) {
+    &:hover {
+      background-color: var(--dsw-alias-button-ghost-active-hover);
+    }
+  }
+}
+
 .sendButton {
   display: flex;
   align-items: center;

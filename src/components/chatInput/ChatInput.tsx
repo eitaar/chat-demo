@@ -1,7 +1,7 @@
 import clsx from 'clsx'
 import { memo, useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
 import {
-  IconBoltOutline14,
+  IconBoltOutline16,
   IconGlobeLanguageOutline14,
   IconPaperclipOutline16,
   IconSendOutline16,
@@ -91,7 +91,7 @@ const Input = ({ sessionId }: { sessionId: string | null }) => {
     const observer = new ResizeObserver(updateLabels)
     observer.observe(toggles)
     return () => observer.disconnect()
-  }, [t, showSearch, fastModel])
+  }, [t, showSearch])
 
   const acceptFiles = (files: File[]) => {
     if (files.length === 0 || useChatStore.getState().importingHistory || !ensureChatConnection()) {
@@ -274,23 +274,6 @@ const Input = ({ sessionId }: { sessionId: string | null }) => {
               </button>
             </Tooltip>
           ) : null}
-          {fastModel ? (
-            <Tooltip content={t('fastModeTooltip', { model: fastModel })}>
-              <button
-                type="button"
-                className={clsx(styles.toggle, fastMode && styles.selected)}
-                aria-label={t('fastMode')}
-                aria-pressed={fastMode}
-                onClick={() => {
-                  setFastSweep(!fastMode)
-                  setFastMode(!fastMode)
-                }}
-              >
-                <IconBoltOutline14 />
-                <span className={styles.toggleLabel}>{t('fastMode')}</span>
-              </button>
-            </Tooltip>
-          ) : null}
         </div>
         <div className={styles.right}>
           {chatCompletions ? null : (
@@ -308,6 +291,21 @@ const Input = ({ sessionId }: { sessionId: string | null }) => {
               }}
             />
           )}
+          {fastModel ? (
+            <IconButton
+              size="m"
+              tone="primary"
+              className={styles.fastButton}
+              icon={<IconBoltOutline16 />}
+              tooltip={t('fastModeTooltip', { model: fastModel })}
+              aria-label={t('fastMode')}
+              aria-pressed={fastMode}
+              onClick={() => {
+                setFastSweep(!fastMode)
+                setFastMode(!fastMode)
+              }}
+            />
+          ) : null}
           <IconButton
             size="m"
             tone="primary"
